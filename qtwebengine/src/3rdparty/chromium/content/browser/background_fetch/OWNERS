@@ -1,0 +1,10 @@
+# This OWNERS file also covers:
+#
+# //content/common/background_fetch/
+
+peter@chromium.org
+johnme@chromium.org
+delphick@chromium.org
+
+# TEAM: platform-capabilities@chromium.org
+# COMPONENT: Blink>BackgroundFetch
