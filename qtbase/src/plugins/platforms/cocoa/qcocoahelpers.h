@@ -240,6 +240,7 @@ ReturnType qt_msgSendSuper(id receiver, SEL selector, Args... args)
     return superFn(&sup, selector, args...);
 }
 
+#ifndef Q_PROCESSOR_ARM_64
 template <typename ReturnType, typename... Args>
 ReturnType qt_msgSendSuper_stret(id receiver, SEL selector, Args... args)
 {
@@ -254,6 +255,7 @@ ReturnType qt_msgSendSuper_stret(id receiver, SEL selector, Args... args)
     superStretFn(&ret, &sup, selector, args...);
     return ret;
 }
+#endif
 
 template<typename... Args>
 class QSendSuperHelper {
@@ -303,11 +305,13 @@ private:
         return qt_msgSendSuper<ReturnType>(m_receiver, m_selector, std::get<Is>(args)...);
     }
 
+#ifndef Q_PROCESSOR_ARM_64
     template <typename ReturnType, std::size_t... Is>
     if_requires_stret<ReturnType, true> msgSendSuper(std::tuple<Args...>& args, index<Is...>)
     {
         return qt_msgSendSuper_stret<ReturnType>(m_receiver, m_selector, std::get<Is>(args)...);
     }
+#endif
 
     template <typename ReturnType>
     ReturnType msgSendSuper(std::tuple<Args...>& args)
