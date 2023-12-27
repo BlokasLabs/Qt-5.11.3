@@ -11,5 +11,5 @@ ${QTDIR}/configure -prefix ${PREFIX} -opensource -confirm-license -nomake tests 
 	-no-feature-systemsemaphore -no-feature-im -no-feature-dom -no-feature-printpreviewwidget -no-feature-printpreviewdialog \
 	-no-feature-cups -no-feature-fontdialog -no-feature-datawidgetmapper -no-feature-imageformat_bmp -no-feature-imageformat_ppm \
 	-no-feature-imageformat_jpeg -no-feature-image_text -no-feature-colornames -no-feature-cups -no-feature-paint_debug \
-	-no-feature-codecs -no-feature-big_codecs -no-feature-iconv -no-feature-ftp -no-feature-udpsocket -no-feature-networkproxy -no-feature-socks5 -no-feature-networkdiskcache \
+	-no-feature-big_codecs -no-feature-iconv -no-feature-ftp -no-feature-udpsocket -no-feature-networkproxy -no-feature-socks5 -no-feature-networkdiskcache \
 	-no-feature-bearermanagement -skip qttools -no-eglfs $@
