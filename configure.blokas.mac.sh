@@ -1,7 +1,7 @@
 #!/bin/sh
 QTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-PREFIX=/opt/Qt-5.11.3-blokas
+PREFIX=/opt/Qt-5.11.3-x86_64-blokas
 
 ${QTDIR}/configure -prefix ${PREFIX} -debug-and-release -platform macx-clang -opensource -confirm-license -nomake tests -nomake examples -no-openssl --verbose \
 	-skip qt3d -skip qtandroidextras -skip qtcanvas3d -skip qtcharts -skip qtconnectivity -skip qtdatavis3d -skip qtdeclarative -skip qtdoc \
