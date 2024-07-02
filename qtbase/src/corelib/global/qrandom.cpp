@@ -220,6 +220,8 @@ struct QRandomGenerator::SystemGenerator
     static SystemGenerator &self();
     void generate(quint32 *begin, quint32 *end) Q_DECL_NOEXCEPT_EXPR(FillBufferNoexcept);
 
+    using result_type = quint32;
+
     // For std::mersenne_twister_engine implementations that use something
     // other than quint32 (unsigned int) to fill their buffers.
     template <typename T> void generate(T *begin, T *end)
