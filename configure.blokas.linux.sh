@@ -3,7 +3,7 @@ QTDIR="$(dirname "$(readlink -f "$0")")"
 
 PREFIX=/opt/Qt-5.11.3-blokas
 
-${QTDIR}/configure -prefix ${PREFIX} -opensource -confirm-license -nomake tests -nomake examples -no-openssl --verbose \
+${QTDIR}/configure -prefix ${PREFIX} -opensource -confirm-license -platform linux-g++ -nomake tests -nomake examples -no-openssl --verbose \
 	-skip qt3d -skip qtandroidextras -skip qtcanvas3d -skip qtcharts -skip qtconnectivity -skip qtdatavis3d -skip qtdeclarative -skip qtdoc \
 	-skip qtgamepad -skip qtgraphicaleffects -skip qtlocation -skip qtmultimedia -skip qtpurchasing -skip qtquickcontrols -skip qtquickcontrols2 \
 	-skip qtscript -skip qtscxml -skip qtsensors -skip qtserialbus -skip qtserialport -skip qttranslations -skip qtvirtualkeyboard \
