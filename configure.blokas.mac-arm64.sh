@@ -12,4 +12,4 @@ ${QTDIR}/configure -prefix ${PREFIX} -debug-and-release -platform macx-clang-arm
 	-no-feature-cups -no-feature-fontdialog -no-feature-datawidgetmapper \
 	-no-feature-colornames -no-feature-cups -no-feature-paint_debug \
 	-no-feature-codecs -no-feature-big_codecs -no-feature-iconv -no-feature-ftp -no-feature-udpsocket -no-feature-networkproxy -no-feature-socks5 -no-feature-networkdiskcache \
-	-no-feature-bearermanagement -skip qttools -no-feature-futimens
+	-no-feature-bearermanagement -skip qttools -no-feature-futimens -qt-freetype $@
