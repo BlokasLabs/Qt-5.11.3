@@ -6,6 +6,7 @@
 #endif
 
 #include <xcb/xcb.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include "xcb_atom.h"
