@@ -23,11 +23,13 @@ qtConfig(wayland-client) {
         sub_imports.depends += sub-compositor
         sub_imports.target = sub-imports
         SUBDIRS += sub_imports
-
-        sub_plugins.subdir = plugins
-        sub_plugins.depends = sub-qtwaylandscanner sub-client sub-compositor
-        sub_plugins.target = sub-plugins
-        SUBDIRS += sub_plugins
     }
+
+    # Client platform plugins are also needed without a compositor build.
+    sub_plugins.subdir = plugins
+    sub_plugins.depends = sub-qtwaylandscanner sub-client
+    qtConfig(wayland-server): sub_plugins.depends += sub-compositor
+    sub_plugins.target = sub-plugins
+    SUBDIRS += sub_plugins
 }
 
