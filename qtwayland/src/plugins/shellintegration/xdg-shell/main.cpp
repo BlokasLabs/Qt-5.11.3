@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2018 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
@@ -37,44 +37,32 @@
 **
 ****************************************************************************/
 
-#include "qwaylandxdgshellv6integration_p.h"
+#include "qwaylandxdgshellintegration_p.h"
 
-#include <QtWaylandClient/private/qwaylandwindow_p.h>
-#include <QtWaylandClient/private/qwaylanddisplay_p.h>
-#include <QtWaylandClient/private/qwaylandxdgshellv6_p.h>
+#include <QtWaylandClient/private/qwaylandshellintegrationplugin_p.h>
 
 QT_BEGIN_NAMESPACE
 
 namespace QtWaylandClient {
 
-QWaylandXdgShellV6Integration::QWaylandXdgShellV6Integration(QWaylandDisplay *display)
+class QWaylandXdgShellStableIntegrationPlugin : public QWaylandShellIntegrationPlugin
 {
-    for (QWaylandDisplay::RegistryGlobal global : display->globals()) {
-        if (global.interface == QLatin1String("zxdg_shell_v6")) {
-            m_xdgShell = new QWaylandXdgShellV6(display->wl_registry(), global.id, global.version);
-            break;
-        }
-    }
-}
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID QWaylandShellIntegrationFactoryInterface_iid FILE "xdg-shell.json")
 
-QWaylandXdgShellV6Integration *QWaylandXdgShellV6Integration::create(QWaylandDisplay *display)
-{
-    if (display->hasRegistryGlobal(QLatin1String("zxdg_shell_v6")))
-        return new QWaylandXdgShellV6Integration(display);
-    return nullptr;
-}
+public:
+    QWaylandShellIntegration *create(const QString &key, const QStringList &paramList) override;
+};
 
-bool QWaylandXdgShellV6Integration::initialize(QWaylandDisplay *display)
+QWaylandShellIntegration *QWaylandXdgShellStableIntegrationPlugin::create(const QString &key, const QStringList &paramList)
 {
-    QWaylandShellIntegration::initialize(display);
-    return m_xdgShell != nullptr;
-}
-
-QWaylandShellSurface *QWaylandXdgShellV6Integration::createShellSurface(QWaylandWindow *window)
-{
-    return m_xdgShell->getXdgSurface(window);
+    Q_UNUSED(key);
+    Q_UNUSED(paramList);
+    return new QWaylandXdgShellStableIntegration();
 }
 
 }
 
 QT_END_NAMESPACE
+
+#include "main.moc"

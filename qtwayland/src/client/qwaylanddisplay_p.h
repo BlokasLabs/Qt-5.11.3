@@ -63,7 +63,6 @@
 
 #include <QtWaylandClient/private/qwayland-wayland.h>
 #include <QtWaylandClient/private/qtwaylandclientglobal_p.h>
-#include <QtWaylandClient/private/qwayland-xdg-shell.h>
 #include <QtWaylandClient/private/qwaylandshm_p.h>
 
 struct wl_cursor_image;
@@ -79,12 +78,11 @@ namespace QtWayland {
     class qt_sub_surface_extension;
     class qt_surface_extension;
     class zwp_text_input_manager_v2;
-    class xdg_shell;
 }
 
 namespace QtWaylandClient {
 
-Q_DECLARE_LOGGING_CATEGORY(lcQpaWayland);
+Q_WAYLAND_CLIENT_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcQpaWayland);
 
 class QWaylandInputDevice;
 class QWaylandBuffer;
@@ -98,7 +96,6 @@ class QWaylandWindow;
 class QWaylandEventThread;
 class QWaylandIntegration;
 class QWaylandHardwareIntegration;
-class QWaylandXdgShell;
 class QWaylandShellSurface;
 
 typedef void (*RegistryListener)(void *data,
@@ -162,6 +159,7 @@ public:
     /* wl_registry_add_listener does not add but rather sets a listener, so this function is used
      * to enable many listeners at once. */
     void addRegistryListener(RegistryListener listener, void *data);
+    void removeListener(RegistryListener listener, void *data);
 
     QWaylandShm *shm() const { return mShm.data(); }
 

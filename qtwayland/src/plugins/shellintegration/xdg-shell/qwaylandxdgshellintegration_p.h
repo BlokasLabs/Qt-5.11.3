@@ -37,44 +37,42 @@
 **
 ****************************************************************************/
 
-#include "qwaylandxdgshellv6integration_p.h"
+#ifndef QWAYLANDXDGSHELLINTEGRATION_P_H
+#define QWAYLANDXDGSHELLINTEGRATION_P_H
 
-#include <QtWaylandClient/private/qwaylandwindow_p.h>
-#include <QtWaylandClient/private/qwaylanddisplay_p.h>
-#include <QtWaylandClient/private/qwaylandxdgshellv6_p.h>
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists purely as an
+// implementation detail.  This header file may change from version to
+// version without notice, or even be removed.
+//
+// We mean it.
+//
+
+#include "qwaylandxdgshell_p.h"
+
+#include <QtWaylandClient/private/qwaylandshellintegration_p.h>
 
 QT_BEGIN_NAMESPACE
 
 namespace QtWaylandClient {
 
-QWaylandXdgShellV6Integration::QWaylandXdgShellV6Integration(QWaylandDisplay *display)
+class QWaylandXdgShellStableIntegration : public QWaylandShellIntegration
 {
-    for (QWaylandDisplay::RegistryGlobal global : display->globals()) {
-        if (global.interface == QLatin1String("zxdg_shell_v6")) {
-            m_xdgShell = new QWaylandXdgShellV6(display->wl_registry(), global.id, global.version);
-            break;
-        }
-    }
-}
+public:
+    QWaylandXdgShellStableIntegration() {}
+    bool initialize(QWaylandDisplay *display) override;
+    QWaylandShellSurface *createShellSurface(QWaylandWindow *window) override;
+    void handleKeyboardFocusChanged(QWaylandWindow *newFocus, QWaylandWindow *oldFocus) override;
 
-QWaylandXdgShellV6Integration *QWaylandXdgShellV6Integration::create(QWaylandDisplay *display)
-{
-    if (display->hasRegistryGlobal(QLatin1String("zxdg_shell_v6")))
-        return new QWaylandXdgShellV6Integration(display);
-    return nullptr;
-}
-
-bool QWaylandXdgShellV6Integration::initialize(QWaylandDisplay *display)
-{
-    QWaylandShellIntegration::initialize(display);
-    return m_xdgShell != nullptr;
-}
-
-QWaylandShellSurface *QWaylandXdgShellV6Integration::createShellSurface(QWaylandWindow *window)
-{
-    return m_xdgShell->getXdgSurface(window);
-}
+private:
+    QScopedPointer<QWaylandXdgShellStable> m_xdgShell;
+};
 
 }
 
 QT_END_NAMESPACE
+
+#endif // QWAYLANDXDGSHELLINTEGRATION_P_H

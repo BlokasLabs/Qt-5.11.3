@@ -45,7 +45,6 @@
 #include "qwaylandscreen_p.h"
 #include "qwaylandshellsurface_p.h"
 #include "qwaylandwlshellsurface_p.h"
-#include "qwaylandxdgsurface_p.h"
 #include "qwaylandsubsurface_p.h"
 #include "qwaylandabstractdecoration_p.h"
 #include "qwaylandwindowmanagerintegration_p.h"
@@ -711,20 +710,6 @@ void QWaylandWindow::setWindowFlags(Qt::WindowFlags flags)
 
 bool QWaylandWindow::createDecoration()
 {
-    // so far only xdg-shell support this "unminimize" trick, may be moved elsewhere
-    if (mState & Qt::WindowMinimized) {
-        QWaylandXdgSurface *xdgSurface = qobject_cast<QWaylandXdgSurface *>(mShellSurface);
-        if ( xdgSurface ) {
-            Qt::WindowStates states;
-            if (xdgSurface->isFullscreen())
-                states |= Qt::WindowFullScreen;
-            if (xdgSurface->isMaximized())
-                states |= Qt::WindowMaximized;
-
-            setWindowStateInternal(states);
-        }
-    }
-
     if (!mDisplay->supportsWindowDecoration())
         return false;
 
@@ -746,6 +731,8 @@ bool QWaylandWindow::createDecoration()
     if (mFlags & Qt::BypassWindowManagerHint)
         decoration = false;
     if (mSubSurfaceWindow)
+        decoration = false;
+    if (mShellSurface && !mShellSurface->wantsDecorations())
         decoration = false;
 
     bool hadDecoration = mWindowDecoration;
@@ -1017,6 +1004,16 @@ bool QWaylandWindow::setWindowStateInternal(Qt::WindowStates state)
 
     QWindowSystemInterface::handleWindowStateChanged(window(), mState);
     return true;
+}
+
+// A compositor configure reports state; it must not send another state request back.
+void QWaylandWindow::handleWindowStatesChanged(Qt::WindowStates states)
+{
+    Qt::WindowStates oldState = mState;
+    mState = states;
+    createDecoration();
+    if (oldState != states)
+        QWindowSystemInterface::handleWindowStateChanged(window(), states, oldState);
 }
 
 void QWaylandWindow::sendProperty(const QString &name, const QVariant &value)

@@ -51,8 +51,6 @@
 #include "qwaylanddatadevicemanager_p.h"
 #endif
 #include "qwaylandhardwareintegration_p.h"
-#include "qwaylandxdgshell_p.h"
-#include "qwaylandxdgsurface_p.h"
 #include "qwaylandwlshellsurface_p.h"
 #include "qwaylandinputcontext_p.h"
 
@@ -66,7 +64,6 @@
 #include "qwaylandqtkey_p.h"
 
 #include <QtWaylandClient/private/qwayland-text-input-unstable-v2.h>
-#include <QtWaylandClient/private/qwayland-xdg-shell.h>
 
 #include <QtCore/QAbstractEventDispatcher>
 #include <QtGui/private/qguiapplication_p.h>
@@ -316,6 +313,15 @@ void QWaylandDisplay::addRegistryListener(RegistryListener listener, void *data)
     mRegistryListeners.append(l);
     for (int i = 0, ie = mGlobals.count(); i != ie; ++i)
         (*l.listener)(l.data, mGlobals[i].registry, mGlobals[i].id, mGlobals[i].interface, mGlobals[i].version);
+}
+
+void QWaylandDisplay::removeListener(RegistryListener listener, void *data)
+{
+    for (int i = mRegistryListeners.size() - 1; i >= 0; --i) {
+        const Listener &entry = mRegistryListeners.at(i);
+        if (entry.listener == listener && entry.data == data)
+            mRegistryListeners.removeAt(i);
+    }
 }
 
 uint32_t QWaylandDisplay::currentTimeMillisec()

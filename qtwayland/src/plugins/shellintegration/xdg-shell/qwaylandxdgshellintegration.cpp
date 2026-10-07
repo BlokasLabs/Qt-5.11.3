@@ -37,42 +37,50 @@
 **
 ****************************************************************************/
 
-#include "qwaylandxdgshellv6integration_p.h"
+#include "qwaylandxdgshellintegration_p.h"
+#include "qwaylandxdgdecorationv1_p.h"
 
 #include <QtWaylandClient/private/qwaylandwindow_p.h>
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
-#include <QtWaylandClient/private/qwaylandxdgshellv6_p.h>
 
 QT_BEGIN_NAMESPACE
 
 namespace QtWaylandClient {
 
-QWaylandXdgShellV6Integration::QWaylandXdgShellV6Integration(QWaylandDisplay *display)
+bool QWaylandXdgShellStableIntegration::initialize(QWaylandDisplay *display)
 {
     for (QWaylandDisplay::RegistryGlobal global : display->globals()) {
-        if (global.interface == QLatin1String("zxdg_shell_v6")) {
-            m_xdgShell = new QWaylandXdgShellV6(display->wl_registry(), global.id, global.version);
+        if (global.interface == QLatin1String("xdg_wm_base")) {
+            m_xdgShell.reset(new QWaylandXdgShellStable(display, global.id, global.version));
             break;
         }
     }
+
+    if (!m_xdgShell) {
+        qCDebug(lcQpaWayland) << "Couldn't find global xdg_wm_base for xdg-shell stable";
+        return false;
+    }
+
+    return QWaylandShellIntegration::initialize(display);
 }
 
-QWaylandXdgShellV6Integration *QWaylandXdgShellV6Integration::create(QWaylandDisplay *display)
-{
-    if (display->hasRegistryGlobal(QLatin1String("zxdg_shell_v6")))
-        return new QWaylandXdgShellV6Integration(display);
-    return nullptr;
-}
-
-bool QWaylandXdgShellV6Integration::initialize(QWaylandDisplay *display)
-{
-    QWaylandShellIntegration::initialize(display);
-    return m_xdgShell != nullptr;
-}
-
-QWaylandShellSurface *QWaylandXdgShellV6Integration::createShellSurface(QWaylandWindow *window)
+QWaylandShellSurface *QWaylandXdgShellStableIntegration::createShellSurface(QWaylandWindow *window)
 {
     return m_xdgShell->getXdgSurface(window);
+}
+
+void QWaylandXdgShellStableIntegration::handleKeyboardFocusChanged(QWaylandWindow *newFocus, QWaylandWindow *oldFocus)
+{
+    if (newFocus) {
+        auto *xdgSurface = qobject_cast<QWaylandXdgSurfaceStable *>(newFocus->shellSurface());
+        if (xdgSurface && !xdgSurface->handlesActiveState())
+            m_display->handleWindowActivated(newFocus);
+    }
+    if (oldFocus && qobject_cast<QWaylandXdgSurfaceStable *>(oldFocus->shellSurface())) {
+        auto *xdgSurface = qobject_cast<QWaylandXdgSurfaceStable *>(oldFocus->shellSurface());
+        if (xdgSurface && !xdgSurface->handlesActiveState())
+            m_display->handleWindowDeactivated(oldFocus);
+    }
 }
 
 }

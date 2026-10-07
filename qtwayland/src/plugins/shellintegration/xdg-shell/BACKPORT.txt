@@ -1,0 +1,48 @@
+Stable xdg-shell client backport
+===============================
+
+Source: qt/qtwayland tag v5.12.12, src/plugins/shellintegration/xdg-shell,
+with xdg-shell.xml and xdg-decoration-unstable-v1.xml from the same tag.
+The upstream copyright and license notices are preserved.
+
+Adaptations for Qt 5.11.3:
+- Role creation uses setType(), followed by an initial bufferless commit.
+- Configure events use the existing queued QWaylandWindow::configure() resize
+  path instead of the Qt 5.12 applyConfigureWhenPossible() API.
+- Window-state requests use the Qt 5.11 shell surface hooks. Compositor state
+  reports update the window without sending state requests back.
+- Server-side decoration negotiation uses a backported wantsDecorations() hook.
+- Registry listeners are removed when the shell integration is destroyed.
+- QWaylandScreen uses Qt 5.12's 96 logical DPI baseline. Desktop scaling is
+  supplied by the Wayland output device pixel ratio. QT_WAYLAND_FORCE_DPI can
+  override the baseline, or select "physical" to restore the old calculation.
+- Plugin classes have Stable suffixes and are not exported by QtWaylandClient.
+- The stable XML file and its protocol group name are suffixed with "stable"
+  so Qt 5.11's scanner produces matching filenames. Wire interface names,
+  including xdg_wm_base, are unchanged.
+- Obsolete xdg-shell v5 client sources/protocol are excluded from the build:
+  their xdg_surface/xdg_popup names conflict with the stable protocol.
+  xdg-shell-v6 and wl-shell remain available as fallbacks.
+- Automatic shell selection tries stable xdg-shell first, and continues to
+  the next candidate if an integration cannot initialize.
+
+Rebuild and install the QtWayland client library AND all its client plugins.
+The shell-surface private vtable changed; do not mix old Wayland plugins with
+the rebuilt library. This backport adds client support only.
+
+After installation, plugins/wayland-shell-integration/libxdg-shell.so should
+exist. Launch Midihub Editor in a Wayland desktop session with:
+
+  QT_QPA_PLATFORM=wayland QT_WAYLAND_SHELL_INTEGRATION=xdg-shell \
+    QT_DEBUG_PLUGINS=1 ./midihub-editor
+
+Expected log: Using the 'xdg-shell' shell integration.
+Test showing/hiding windows, resizing, maximizing/restoring, fullscreen,
+minimizing/restoring, dialogs, context menus, nested menus, and tooltips.
+Then test pipe dragging within the editor, outside its window and back in,
+and between two editor processes. Confirm accepted/rejected cursors and that
+releasing or cancelling a drag always ends the operation.
+
+Repeat without QT_WAYLAND_SHELL_INTEGRATION to test automatic selection.
+Launch with QT_QPA_PLATFORM=xcb to check that the X11 path still works.
+Runtime behavior on KWin remains a separate check from compilation.

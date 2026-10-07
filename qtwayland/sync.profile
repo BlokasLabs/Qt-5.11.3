@@ -28,7 +28,6 @@
         "^qwayland-touch-extension.h",
         "^qwayland-wayland.h",
         "^qwayland-xdg-shell-unstable-v6.h",
-        "^qwayland-xdg-shell.h",
         "^wayland-hardware-integration-client-protocol.h",
         "^wayland-qt-windowmanager-client-protocol.h",
         "^wayland-qtkey-extension-client-protocol.h",
@@ -37,7 +36,6 @@
         "^wayland-text-input-unstable-v2-client-protocol.h",
         "^wayland-touch-extension-client-protocol.h",
         "^wayland-wayland-client-protocol.h",
-        "^wayland-xdg-shell-client-protocol.h",
         "^wayland-xdg-shell-unstable-v6-client-protocol.h",
     ],
     "$basedir/src/compositor" => [

@@ -84,6 +84,7 @@ public:
 
     virtual void setWindowFlags(Qt::WindowFlags flags);
 
+    virtual bool wantsDecorations() const { return true; }
     virtual bool isExposed() const { return true; }
     virtual bool handleExpose(const QRegion &) { return false; }
 

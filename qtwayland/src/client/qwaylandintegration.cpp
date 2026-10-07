@@ -82,7 +82,6 @@
 
 #include "qwaylandshellintegration_p.h"
 #include "qwaylandshellintegrationfactory_p.h"
-#include "qwaylandxdgshellintegration_p.h"
 #include "qwaylandwlshellintegration_p.h"
 #include "qwaylandxdgshellv6integration_p.h"
 
@@ -400,25 +399,20 @@ void QWaylandIntegration::initializeShellIntegration()
     if (!targetKey.isEmpty()) {
         preferredShells << targetKey;
     } else {
-        preferredShells << QLatin1String("xdg-shell-v6");
-        QString useXdgShell = QString::fromLocal8Bit(qgetenv("QT_WAYLAND_USE_XDG_SHELL"));
-        if (!useXdgShell.isEmpty() && useXdgShell != QLatin1String("0")) {
-            qWarning() << "QT_WAYLAND_USE_XDG_SHELL is deprecated, "
-                          "please specify the shell using QT_WAYLAND_SHELL_INTEGRATION instead";
-            preferredShells << QLatin1String("xdg-shell-v5");
-        }
+        preferredShells << QLatin1String("xdg-shell") << QLatin1String("xdg-shell-v6");
         preferredShells << QLatin1String("wl-shell") << QLatin1String("ivi-shell");
     }
 
     Q_FOREACH (QString preferredShell, preferredShells) {
         mShellIntegration.reset(createShellIntegration(preferredShell));
-        if (mShellIntegration) {
+        if (mShellIntegration && mShellIntegration->initialize(mDisplay.data())) {
             qDebug("Using the '%s' shell integration", qPrintable(preferredShell));
             break;
         }
+        mShellIntegration.reset();
     }
 
-    if (!mShellIntegration || !mShellIntegration->initialize(mDisplay.data())) {
+    if (!mShellIntegration) {
         mShellIntegration.reset();
         qWarning("Failed to load shell integration %s", qPrintable(targetKey));
     }
@@ -454,8 +448,6 @@ QWaylandShellIntegration *QWaylandIntegration::createShellIntegration(const QStr
 {
     if (integrationName == QLatin1Literal("wl-shell")) {
         return QWaylandWlShellIntegration::create(mDisplay.data());
-    } else if (integrationName == QLatin1Literal("xdg-shell-v5")) {
-        return QWaylandXdgShellIntegration::create(mDisplay.data());
     } else if (integrationName == QLatin1Literal("xdg-shell-v6")) {
         return QWaylandXdgShellV6Integration::create(mDisplay.data());
     } else if (QWaylandShellIntegrationFactory::keys().contains(integrationName)) {

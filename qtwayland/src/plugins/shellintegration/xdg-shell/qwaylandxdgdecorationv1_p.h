@@ -1,9 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2018 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
-** This file is part of the plugins of the Qt Toolkit.
+** This file is part of the config.tests of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
@@ -37,44 +37,61 @@
 **
 ****************************************************************************/
 
-#include "qwaylandxdgshellv6integration_p.h"
+#ifndef QWAYLANDXDGDECORATIONV1_P_H
+#define QWAYLANDXDGDECORATIONV1_P_H
 
-#include <QtWaylandClient/private/qwaylandwindow_p.h>
-#include <QtWaylandClient/private/qwaylanddisplay_p.h>
-#include <QtWaylandClient/private/qwaylandxdgshellv6_p.h>
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists purely as an
+// implementation detail.  This header file may change from version to
+// version without notice, or even be removed.
+//
+// We mean it.
+//
+
+#include "qwayland-xdg-decoration-unstable-v1.h"
+
+#include <QtWaylandClient/qtwaylandclientglobal.h>
 
 QT_BEGIN_NAMESPACE
 
+class QWindow;
+
 namespace QtWaylandClient {
 
-QWaylandXdgShellV6Integration::QWaylandXdgShellV6Integration(QWaylandDisplay *display)
-{
-    for (QWaylandDisplay::RegistryGlobal global : display->globals()) {
-        if (global.interface == QLatin1String("zxdg_shell_v6")) {
-            m_xdgShell = new QWaylandXdgShellV6(display->wl_registry(), global.id, global.version);
-            break;
-        }
-    }
-}
+class QWaylandXdgToplevel;
+class QWaylandXdgToplevelDecorationV1;
 
-QWaylandXdgShellV6Integration *QWaylandXdgShellV6Integration::create(QWaylandDisplay *display)
+class QWaylandXdgDecorationManagerV1 : public QtWayland::zxdg_decoration_manager_v1
 {
-    if (display->hasRegistryGlobal(QLatin1String("zxdg_shell_v6")))
-        return new QWaylandXdgShellV6Integration(display);
-    return nullptr;
-}
+public:
+    QWaylandXdgDecorationManagerV1(struct ::wl_registry *registry, uint32_t id, uint32_t availableVersion);
+    ~QWaylandXdgDecorationManagerV1() override;
+    QWaylandXdgToplevelDecorationV1 *createToplevelDecoration(::xdg_toplevel *toplevel);
+};
 
-bool QWaylandXdgShellV6Integration::initialize(QWaylandDisplay *display)
+class QWaylandXdgToplevelDecorationV1 : public QtWayland::zxdg_toplevel_decoration_v1
 {
-    QWaylandShellIntegration::initialize(display);
-    return m_xdgShell != nullptr;
-}
+public:
+    QWaylandXdgToplevelDecorationV1(::zxdg_toplevel_decoration_v1 *decoration);
+    ~QWaylandXdgToplevelDecorationV1() override;
+    void requestMode(mode mode);
+    void unsetMode();
+    mode pending() const;
 
-QWaylandShellSurface *QWaylandXdgShellV6Integration::createShellSurface(QWaylandWindow *window)
-{
-    return m_xdgShell->getXdgSurface(window);
-}
+protected:
+    void zxdg_toplevel_decoration_v1_configure(uint32_t mode) override;
 
-}
+private:
+    mode m_pending = mode_client_side;
+    mode m_requested = mode_client_side;
+    bool m_modeSet = false;
+};
 
 QT_END_NAMESPACE
+
+}
+
+#endif // QWAYLANDXDGDECORATIONV1_P_H

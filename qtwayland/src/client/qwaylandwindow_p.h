@@ -123,6 +123,7 @@ public:
     void setGeometry(const QRect &rect) override;
 
     void configure(uint32_t edges, int32_t width, int32_t height);
+    void handleWindowStatesChanged(Qt::WindowStates states);
 
     using QtWayland::wl_surface::attach;
     void attach(QWaylandBuffer *buffer, int x, int y);
