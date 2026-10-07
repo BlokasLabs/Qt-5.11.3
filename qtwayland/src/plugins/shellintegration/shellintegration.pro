@@ -1,3 +1,5 @@
 TEMPLATE = subdirs
+QT_FOR_CONFIG += waylandclient-private
 
-SUBDIRS += ivi-shell xdg-shell
+SUBDIRS += xdg-shell
+qtConfig(wayland-ivi-shell): SUBDIRS += ivi-shell

@@ -46,3 +46,8 @@ releasing or cancelling a drag always ends the operation.
 Repeat without QT_WAYLAND_SHELL_INTEGRATION to test automatic selection.
 Launch with QT_QPA_PLATFORM=xcb to check that the X11 path still works.
 Runtime behavior on KWin remains a separate check from compilation.
+
+The Blokas Linux configure scripts disable IVI shell and custom Qt compositor
+server buffer integrations through -no-feature-wayland-ivi-shell and
+-no-feature-wayland-server-buffer. Standard QtWayland builds retain these
+features by default. Disabled plugins are omitted from build/install targets.

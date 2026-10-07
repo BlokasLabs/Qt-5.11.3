@@ -81,6 +81,16 @@
             "condition": "features.draganddrop || features.clipboard",
             "output": [ "privateFeature" ]
         },
+        "wayland-ivi-shell": {
+            "label": "IVI shell integration",
+            "condition": "features.wayland-client",
+            "output": [ "privateFeature" ]
+        },
+        "wayland-server-buffer": {
+            "label": "Qt compositor server buffer integrations",
+            "condition": "features.wayland-client",
+            "output": [ "privateFeature" ]
+        },
         "wayland-egl": {
             "label": "EGL",
             "condition": "features.wayland-client && features.opengl && features.egl && libs.wayland-egl",
@@ -103,12 +113,12 @@
         },
         "drm-egl-server": {
             "label": "DRM EGL",
-            "condition": "features.wayland-client && features.opengl && features.egl && tests.drm-egl-server",
+            "condition": "features.wayland-server-buffer && features.opengl && features.egl && tests.drm-egl-server",
             "output": [ "privateFeature" ]
         },
         "libhybris-egl-server": {
             "label": "libhybris EGL",
-            "condition": "features.wayland-client && features.opengl && features.egl && tests.libhybris-egl-server",
+            "condition": "features.wayland-server-buffer && features.opengl && features.egl && tests.libhybris-egl-server",
             "output": [ "privateFeature" ]
         }
     },
@@ -128,6 +138,8 @@
             "entries": [
                 "wayland-egl",
                 "wayland-brcm",
+                "wayland-ivi-shell",
+                "wayland-server-buffer",
                 "xcomposite-egl",
                 "xcomposite-glx",
                 "drm-egl-server",
