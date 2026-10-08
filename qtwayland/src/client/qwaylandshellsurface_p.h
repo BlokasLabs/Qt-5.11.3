@@ -63,6 +63,7 @@ QT_BEGIN_NAMESPACE
 
 class QVariant;
 class QWindow;
+class QIcon;
 
 namespace QtWaylandClient {
 
@@ -81,6 +82,7 @@ public:
     virtual bool move(QWaylandInputDevice *) { return false; }
     virtual void setTitle(const QString & /*title*/) {}
     virtual void setAppId(const QString & /*appId*/) {}
+    virtual void setIcon(const QIcon & /*icon*/) {}
 
     virtual void setWindowFlags(Qt::WindowFlags flags);
 

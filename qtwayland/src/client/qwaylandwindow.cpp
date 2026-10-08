@@ -130,6 +130,8 @@ void QWaylandWindow::initWindow()
         QGuiApplication::sendEvent(window(), &e);
     }
 
+    mScale = waylandScreen()->scale();
+
     if (shouldCreateSubSurface()) {
         Q_ASSERT(!mSubSurfaceWindow);
 
@@ -146,6 +148,7 @@ void QWaylandWindow::initWindow()
 
             // Set initial surface title
             setWindowTitle(window()->title());
+            setWindowIcon(window()->icon());
 
             // The appId is the desktop entry identifier that should follow the
             // reverse DNS convention (see http://standards.freedesktop.org/desktop-entry-spec/latest/ar01s02.html).
@@ -184,8 +187,6 @@ void QWaylandWindow::initWindow()
             qWarning("Could not create a shell surface object.");
         }
     }
-
-    mScale = waylandScreen()->scale();
 
     // Enable high-dpi rendering. Scale() returns the screen scale factor and will
     // typically be integer 1 (normal-dpi) or 2 (high-dpi). Call set_buffer_scale()
@@ -310,6 +311,8 @@ void QWaylandWindow::setWindowTitle(const QString &title)
 void QWaylandWindow::setWindowIcon(const QIcon &icon)
 {
     mWindowIcon = icon;
+    if (mShellSurface)
+        mShellSurface->setIcon(icon);
 
     if (mWindowDecoration && window()->isVisible())
         mWindowDecoration->update();
@@ -921,6 +924,8 @@ void QWaylandWindow::handleScreenChanged()
         if (isInitialized() && mDisplay->compositorVersion() >= 3)
             set_buffer_scale(mScale);
         ensureSize();
+        if (mShellSurface)
+            mShellSurface->setIcon(mWindowIcon);
     }
 }
 

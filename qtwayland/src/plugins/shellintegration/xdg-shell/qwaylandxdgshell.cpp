@@ -290,6 +290,16 @@ void QWaylandXdgSurfaceStable::setAppId(const QString &appId)
         m_toplevel->set_app_id(appId);
 }
 
+void QWaylandXdgSurfaceStable::setIcon(const QIcon &icon)
+{
+    if (m_toplevel) {
+        if (auto *manager = m_shell->iconManager()) {
+            manager->setWindowIcon(m_toplevel->object(), icon, m_window->scale());
+            m_window->wl_surface::commit();
+        }
+    }
+}
+
 void QWaylandXdgSurfaceStable::setWindowFlags(Qt::WindowFlags flags)
 {
     if (m_toplevel)
@@ -436,6 +446,8 @@ void QWaylandXdgShellStable::handleRegistryGlobal(void *data, wl_registry *regis
     QWaylandXdgShellStable *xdgShell = static_cast<QWaylandXdgShellStable *>(data);
     if (interface == QLatin1String(QWaylandXdgDecorationManagerV1::interface()->name))
         xdgShell->m_xdgDecorationManager.reset(new QWaylandXdgDecorationManagerV1(registry, id, version));
+    else if (interface == QLatin1String(QWaylandXdgToplevelIconManagerV1::interface()->name))
+        xdgShell->m_iconManager.reset(new QWaylandXdgToplevelIconManagerV1(xdgShell->m_display, id, version));
 }
 
 }

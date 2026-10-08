@@ -55,6 +55,7 @@
 #include "qwayland-xdg-shell-stable.h"
 
 #include "qwaylandxdgdecorationv1_p.h"
+#include "qwaylandxdgtopleveliconv1_p.h"
 
 #include <QtWaylandClient/qtwaylandclientglobal.h>
 #include <QtWaylandClient/private/qwaylandshellsurface_p.h>
@@ -87,6 +88,7 @@ public:
     bool move(QWaylandInputDevice *inputDevice) override;
     void setTitle(const QString &title) override;
     void setAppId(const QString &appId) override;
+    void setIcon(const QIcon &icon) override;
     void setWindowFlags(Qt::WindowFlags flags) override;
 
     bool isExposed() const override;
@@ -164,6 +166,7 @@ public:
     ~QWaylandXdgShellStable() override;
 
     QWaylandXdgDecorationManagerV1 *decorationManager() { return m_xdgDecorationManager.data(); }
+    QWaylandXdgToplevelIconManagerV1 *iconManager() { return m_iconManager.data(); }
     QWaylandXdgSurfaceStable *getXdgSurface(QWaylandWindow *window);
 
 protected:
@@ -175,6 +178,7 @@ private:
 
     QWaylandDisplay *m_display = nullptr;
     QScopedPointer<QWaylandXdgDecorationManagerV1> m_xdgDecorationManager;
+    QScopedPointer<QWaylandXdgToplevelIconManagerV1> m_iconManager;
     QWaylandXdgSurfaceStable::Popup *m_topmostGrabbingPopup = nullptr;
 
     friend class QWaylandXdgSurfaceStable;

@@ -1,6 +1,13 @@
 Stable xdg-shell client backport
 ===============================
 
+Window icons: the plugin also implements xdg-toplevel-icon-v1 using the
+vendored XML from wayland-protocols. When the compositor advertises this
+optional protocol, initial and updated QWindow icons are sent as shared-memory
+pixel buffers, including the output scale. Null icons clear the override.
+No desktop entries or icon files are installed. Compositors without the
+protocol retain their normal desktop-entry/default icon behavior.
+
 Source: qt/qtwayland tag v5.12.12, src/plugins/shellintegration/xdg-shell,
 with xdg-shell.xml and xdg-decoration-unstable-v1.xml from the same tag.
 The upstream copyright and license notices are preserved.

@@ -6,15 +6,18 @@ qtConfig(xkbcommon-evdev): \
     QMAKE_USE_PRIVATE += xkbcommon_evdev
 
 WAYLANDCLIENTSOURCES += \
+    ../../../3rdparty/protocol/xdg-toplevel-icon-v1.xml \
     ../../../3rdparty/protocol/xdg-decoration-unstable-v1.xml \
     ../../../3rdparty/protocol/xdg-shell-stable.xml
 
 HEADERS += \
+    qwaylandxdgtopleveliconv1_p.h \
     qwaylandxdgdecorationv1_p.h \
     qwaylandxdgshell_p.h \
     qwaylandxdgshellintegration_p.h \
 
 SOURCES += \
+    qwaylandxdgtopleveliconv1.cpp \
     main.cpp \
     qwaylandxdgdecorationv1.cpp \
     qwaylandxdgshell.cpp \
