@@ -331,8 +331,8 @@ void QKdeThemePrivate::refresh()
     }
 
     const QVariant singleClickValue = readKdeSetting(QStringLiteral("KDE/SingleClick"), kdeDirs, kdeVersion, kdeSettings);
-    if (singleClickValue.isValid())
-        singleClick = singleClickValue.toBool();
+    // Plasma 6 defaults to double-click activation when the setting is absent.
+    singleClick = singleClickValue.isValid() ? singleClickValue.toBool() : kdeVersion < 6;
 
     const QVariant showIconsOnPushButtonsValue = readKdeSetting(QStringLiteral("KDE/ShowIconsOnPushButtons"), kdeDirs, kdeVersion, kdeSettings);
     if (showIconsOnPushButtonsValue.isValid())
