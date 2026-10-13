@@ -293,6 +293,7 @@ public:
     int toolButtonStyle = Qt::ToolButtonTextBesideIcon;
     int toolBarIconSize = 0;
     bool singleClick = true;
+    bool scrollbarLeftClickNavigatesByPage = true;
     bool showIconsOnPushButtons = true;
     int wheelScrollLines = 3;
     int doubleClickInterval = 400;
@@ -306,15 +307,17 @@ void QKdeThemePrivate::refresh()
     resources.clear();
 
     toolButtonStyle = Qt::ToolButtonTextBesideIcon;
-    toolBarIconSize = 0;
+    toolBarIconSize = kdeVersion >= 5 ? 22 : 0;
     styleNames.clear();
     if (kdeVersion >= 5)
         styleNames << QStringLiteral("breeze");
     styleNames << QStringLiteral("Oxygen") << QStringLiteral("fusion") << QStringLiteral("windows");
-    if (kdeVersion >= 5)
-        iconFallbackThemeName = iconThemeName = QStringLiteral("breeze");
-    else
+    if (kdeVersion >= 5) {
+        iconThemeName = QStringLiteral("breeze");
+        iconFallbackThemeName = QStringLiteral("hicolor");
+    } else {
         iconFallbackThemeName = iconThemeName = QStringLiteral("oxygen");
+    }
 
     QHash<QString, QSettings*> kdeSettings;
 
@@ -323,7 +326,9 @@ void QKdeThemePrivate::refresh()
     resources.palettes[QPlatformTheme::SystemPalette] = new QPalette(systemPalette);
     //## TODO tooltip color
 
-    const QVariant styleValue = readKdeSetting(QStringLiteral("widgetStyle"), kdeDirs, kdeVersion, kdeSettings);
+    QVariant styleValue = readKdeSetting(QStringLiteral("KDE/widgetStyle"), kdeDirs, kdeVersion, kdeSettings);
+    if (!styleValue.isValid())
+        styleValue = readKdeSetting(QStringLiteral("widgetStyle"), kdeDirs, kdeVersion, kdeSettings);
     if (styleValue.isValid()) {
         const QString style = styleValue.toString();
         if (style != styleNames.front())
@@ -334,6 +339,9 @@ void QKdeThemePrivate::refresh()
     // Plasma 6 defaults to double-click activation when the setting is absent.
     singleClick = singleClickValue.isValid() ? singleClickValue.toBool() : kdeVersion < 6;
 
+    const QVariant scrollbarValue = readKdeSetting(QStringLiteral("KDE/ScrollbarLeftClickNavigatesByPage"), kdeDirs, kdeVersion, kdeSettings);
+    scrollbarLeftClickNavigatesByPage = scrollbarValue.isValid() ? scrollbarValue.toBool() : kdeVersion < 6;
+
     const QVariant showIconsOnPushButtonsValue = readKdeSetting(QStringLiteral("KDE/ShowIconsOnPushButtons"), kdeDirs, kdeVersion, kdeSettings);
     if (showIconsOnPushButtonsValue.isValid())
         showIconsOnPushButtons = showIconsOnPushButtonsValue.toBool();
@@ -342,18 +350,22 @@ void QKdeThemePrivate::refresh()
     if (themeValue.isValid())
         iconThemeName = themeValue.toString();
 
-    const QVariant toolBarIconSizeValue = readKdeSetting(QStringLiteral("ToolbarIcons/Size"), kdeDirs, kdeVersion, kdeSettings);
+    QVariant toolBarIconSizeValue = readKdeSetting(QStringLiteral("MainToolbarIcons/Size"), kdeDirs, kdeVersion, kdeSettings);
+    if (!toolBarIconSizeValue.isValid())
+        toolBarIconSizeValue = readKdeSetting(QStringLiteral("ToolbarIcons/Size"), kdeDirs, kdeVersion, kdeSettings);
     if (toolBarIconSizeValue.isValid())
         toolBarIconSize = toolBarIconSizeValue.toInt();
 
     const QVariant toolbarStyleValue = readKdeSetting(QStringLiteral("Toolbar style/ToolButtonStyle"), kdeDirs, kdeVersion, kdeSettings);
     if (toolbarStyleValue.isValid()) {
-        const QString toolBarStyle = toolbarStyleValue.toString();
-        if (toolBarStyle == QLatin1String("TextBesideIcon"))
+        const QString toolBarStyle = toolbarStyleValue.toString().toLower();
+        if (toolBarStyle == QLatin1String("icononly"))
+            toolButtonStyle = Qt::ToolButtonIconOnly;
+        else if (toolBarStyle == QLatin1String("textbesideicon") || toolBarStyle == QLatin1String("icontextright"))
             toolButtonStyle =  Qt::ToolButtonTextBesideIcon;
-        else if (toolBarStyle == QLatin1String("TextOnly"))
+        else if (toolBarStyle == QLatin1String("textonly"))
             toolButtonStyle = Qt::ToolButtonTextOnly;
-        else if (toolBarStyle == QLatin1String("TextUnderIcon"))
+        else if (toolBarStyle == QLatin1String("textundericon") || toolBarStyle == QLatin1String("icontextbottom"))
             toolButtonStyle = Qt::ToolButtonTextUnderIcon;
     }
 
@@ -383,12 +395,15 @@ void QKdeThemePrivate::refresh()
     if (QFont *systemFont = kdeFont(readKdeSetting(QStringLiteral("font"), kdeDirs, kdeVersion, kdeSettings)))
         resources.fonts[QPlatformTheme::SystemFont] = systemFont;
     else
-        resources.fonts[QPlatformTheme::SystemFont] = new QFont(QLatin1String(defaultSystemFontNameC), defaultSystemFontSize);
+        resources.fonts[QPlatformTheme::SystemFont] = kdeVersion >= 5
+            ? new QFont(QStringLiteral("Noto Sans"), 10)
+            : new QFont(QLatin1String(defaultSystemFontNameC), defaultSystemFontSize);
 
     if (QFont *fixedFont = kdeFont(readKdeSetting(QStringLiteral("fixed"), kdeDirs, kdeVersion, kdeSettings))) {
         resources.fonts[QPlatformTheme::FixedFont] = fixedFont;
     } else {
-        fixedFont = new QFont(QLatin1String(defaultSystemFontNameC), defaultSystemFontSize);
+        fixedFont = kdeVersion >= 5 ? new QFont(QStringLiteral("Hack"), 10)
+                                   : new QFont(QLatin1String(defaultSystemFontNameC), defaultSystemFontSize);
         fixedFont->setStyleHint(QFont::TypeWriter);
         resources.fonts[QPlatformTheme::FixedFont] = fixedFont;
     }
@@ -396,10 +411,15 @@ void QKdeThemePrivate::refresh()
     if (QFont *menuFont = kdeFont(readKdeSetting(QStringLiteral("menuFont"), kdeDirs, kdeVersion, kdeSettings))) {
         resources.fonts[QPlatformTheme::MenuFont] = menuFont;
         resources.fonts[QPlatformTheme::MenuBarFont] = new QFont(*menuFont);
+    } else {
+        resources.fonts[QPlatformTheme::MenuFont] = new QFont(*resources.fonts[QPlatformTheme::SystemFont]);
+        resources.fonts[QPlatformTheme::MenuBarFont] = new QFont(*resources.fonts[QPlatformTheme::SystemFont]);
     }
 
     if (QFont *toolBarFont = kdeFont(readKdeSetting(QStringLiteral("toolBarFont"), kdeDirs, kdeVersion, kdeSettings)))
         resources.fonts[QPlatformTheme::ToolButtonFont] = toolBarFont;
+    else
+        resources.fonts[QPlatformTheme::ToolButtonFont] = new QFont(*resources.fonts[QPlatformTheme::SystemFont]);
 
     qDeleteAll(kdeSettings);
 }
@@ -421,6 +441,24 @@ QVariant QKdeThemePrivate::readKdeSetting(const QString &key, const QStringList 
                 return value;
         }
     }
+    if (kdeVersion >= 5 && key.startsWith(QLatin1String("Colors:"))) {
+        // KDE normally copies scheme colors into kdeglobals, but missing roles
+        // should still follow the selected scheme rather than the old KDE palette.
+        const QVariant schemeValue = readKdeSetting(QStringLiteral("General/ColorScheme"), kdeDirs, kdeVersion, kdeSettings);
+        const QString scheme = schemeValue.isValid() ? schemeValue.toString() : QStringLiteral("BreezeLight");
+        if (!scheme.isEmpty() && QFileInfo(scheme).fileName() == scheme) {
+            const QString schemePath = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                QStringLiteral("color-schemes/") + scheme + QStringLiteral(".colors"));
+            if (!schemePath.isEmpty()) {
+                QSettings *settings = kdeSettings.value(schemePath);
+                if (!settings) {
+                    settings = new QSettings(schemePath, QSettings::IniFormat);
+                    kdeSettings.insert(schemePath, settings);
+                }
+                return settings->value(key);
+            }
+        }
+    }
     return QVariant();
 }
 
@@ -439,7 +477,24 @@ static inline bool kdeColor(QPalette *pal, QPalette::ColorRole role, const QVari
 
 void QKdeThemePrivate::readKdeSystemPalette(const QStringList &kdeDirs, int kdeVersion, QHash<QString, QSettings*> &kdeSettings, QPalette *pal)
 {
-    if (!kdeColor(pal, QPalette::Button, readKdeSetting(QStringLiteral("Colors:Button/BackgroundNormal"), kdeDirs, kdeVersion, kdeSettings))) {
+    if (kdeVersion >= 5) {
+        // Breeze Light defaults also cover installations without color-scheme files.
+        *pal = QPalette(QColor(252, 252, 252), QColor(239, 240, 241));
+        const QColor text(35, 38, 41);
+        pal->setColor(QPalette::Text, text);
+        pal->setColor(QPalette::WindowText, text);
+        pal->setColor(QPalette::ButtonText, text);
+        pal->setColor(QPalette::Base, Qt::white);
+        pal->setColor(QPalette::AlternateBase, QColor(247, 247, 247));
+        pal->setColor(QPalette::Highlight, QColor(61, 174, 233));
+        pal->setColor(QPalette::HighlightedText, Qt::white);
+        pal->setColor(QPalette::Link, QColor(41, 128, 185));
+        pal->setColor(QPalette::LinkVisited, QColor(155, 89, 182));
+        pal->setColor(QPalette::ToolTipBase, QColor(247, 247, 247));
+        pal->setColor(QPalette::ToolTipText, text);
+    }
+    const bool hasButtonColor = kdeColor(pal, QPalette::Button, readKdeSetting(QStringLiteral("Colors:Button/BackgroundNormal"), kdeDirs, kdeVersion, kdeSettings));
+    if (!hasButtonColor && kdeVersion < 5) {
         // kcolorscheme.cpp: SetDefaultColors
         const QColor defaultWindowBackground(214, 210, 208);
         const QColor defaultButtonBackground(223, 220, 217);
@@ -575,6 +630,8 @@ QVariant QKdeTheme::themeHint(QPlatformTheme::ThemeHint hint) const
         return QVariant(int(KdeKeyboardScheme));
     case QPlatformTheme::ItemViewActivateItemOnSingleClick:
         return QVariant(d->singleClick);
+    case QPlatformTheme::ScrollbarLeftClickAbsolutePosition:
+        return QVariant(!d->scrollbarLeftClickNavigatesByPage);
     case QPlatformTheme::WheelScrollLines:
         return QVariant(d->wheelScrollLines);
     case QPlatformTheme::MouseDoubleClickInterval:

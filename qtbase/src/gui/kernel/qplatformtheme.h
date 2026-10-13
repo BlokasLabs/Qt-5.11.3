@@ -118,7 +118,8 @@ public:
         TouchDoubleTapDistance,
         ShowShortcutsInContextMenus,
         IconFallbackSearchPaths,
-        MouseQuickSelectionThreshold
+        MouseQuickSelectionThreshold,
+        ScrollbarLeftClickAbsolutePosition
     };
 
     enum DialogType {

@@ -125,6 +125,8 @@ QT_BEGIN_NAMESPACE
 
     \value ItemViewActivateItemOnSingleClick (bool) Activate items by single click.
 
+    \value ScrollbarLeftClickAbsolutePosition (bool) Jump to the clicked scrollbar track position.
+
     \value StyleNames (QStringList) A list of preferred style names.
 
     \value WindowAutoPlacement (bool) A boolean value indicating whether Windows
@@ -506,6 +508,7 @@ QVariant QPlatformTheme::defaultThemeHint(ThemeHint hint)
     case QPlatformTheme::DialogButtonBoxButtonsHaveIcons:
         return QVariant(false);
     case QPlatformTheme::ItemViewActivateItemOnSingleClick:
+    case QPlatformTheme::ScrollbarLeftClickAbsolutePosition:
         return QVariant(false);
     case QPlatformTheme::ToolButtonStyle:
         return QVariant(int(Qt::ToolButtonIconOnly));

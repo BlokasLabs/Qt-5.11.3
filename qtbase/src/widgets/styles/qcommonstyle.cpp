@@ -4983,6 +4983,10 @@ int QCommonStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget
     case SH_ScrollBar_ContextMenu:
         ret = true;
         break;
+    case SH_ScrollBar_LeftClickAbsolutePosition:
+        if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme())
+            ret = theme->themeHint(QPlatformTheme::ScrollbarLeftClickAbsolutePosition).toBool();
+        break;
 #if QT_CONFIG(dialogbuttonbox)
     case SH_DialogButtons_DefaultButton:  // This value not used anywhere.
         ret = QDialogButtonBox::AcceptRole;
