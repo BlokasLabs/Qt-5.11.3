@@ -41,6 +41,8 @@
 #include "qgtk3dialoghelpers.h"
 #include "qgtk3menu.h"
 #include <QVariant>
+#include <QGuiApplication>
+#include <qpa/qwindowsysteminterface.h>
 
 #undef signals
 #include <gtk/gtk.h>
@@ -82,24 +84,185 @@ void gtkMessageHandler(const gchar *log_domain,
     }
 }
 
-QGtk3Theme::QGtk3Theme()
+bool QGtk3Theme::initialize()
 {
-    // gtk_init will reset the Xlib error handler, and that causes
-    // Qt applications to quit on X errors. Therefore, we need to manually restore it.
-    int (*oldErrorHandler)(Display *, XErrorEvent *) = XSetErrorHandler(NULL);
-
-    gtk_init(0, 0);
-
+    // A failed GTK connection must allow Qt to try the next platform theme.
+    if (qEnvironmentVariableIsEmpty("GDK_BACKEND"))
+        gdk_set_allowed_backends(QGuiApplication::platformName().startsWith(QLatin1String("wayland"))
+                                 ? "wayland" : "x11");
+    int (*oldErrorHandler)(Display *, XErrorEvent *) = XSetErrorHandler(nullptr);
+    const bool initialized = gtk_init_check(nullptr, nullptr);
     XSetErrorHandler(oldErrorHandler);
+    return initialized;
+}
 
-    /* Initialize some types here so that Gtk+ does not crash when reading
-     * the treemodel for GtkFontChooser.
-     */
+QGtk3Theme::QGtk3Theme()
+    : m_palette(*QGnomeTheme::palette(SystemPalette)), m_tooltipPalette(m_palette)
+{
     g_type_ensure(PANGO_TYPE_FONT_FAMILY);
     g_type_ensure(PANGO_TYPE_FONT_FACE);
+    g_log_set_handler("Gtk", G_LOG_LEVEL_MESSAGE, gtkMessageHandler, nullptr);
 
-    /* Use our custom log handler. */
-    g_log_set_handler("Gtk", G_LOG_LEVEL_MESSAGE, gtkMessageHandler, NULL);
+    const auto desktops = qgetenv("XDG_CURRENT_DESKTOP").toUpper().split(':');
+    if (desktops.contains("GNOME") || desktops.contains("UNITY")) {
+        GSettingsSchemaSource *source = g_settings_schema_source_get_default();
+        GSettingsSchema *schema = source ? g_settings_schema_source_lookup(source,
+            "org.gnome.desktop.interface", true) : nullptr;
+        if (schema) {
+            if (g_settings_schema_has_key(schema, "color-scheme")) {
+                m_gnomeSettings = g_settings_new_full(schema, nullptr, nullptr);
+                g_signal_connect(m_gnomeSettings, "changed::color-scheme",
+                    G_CALLBACK(+[](GSettings *, gchar *, gpointer data) {
+                        static_cast<QGtk3Theme *>(data)->updatePalette();
+                    }), this);
+            }
+            g_settings_schema_unref(schema);
+        }
+    }
+    GtkSettings *settings = gtk_settings_get_default();
+    for (const char *signal : {"notify::gtk-theme-name", "notify::gtk-application-prefer-dark-theme"})
+        g_signal_connect(settings, signal,
+            G_CALLBACK(+[](GObject *, GParamSpec *, gpointer data) {
+                static_cast<QGtk3Theme *>(data)->updatePalette();
+            }), this);
+    updatePalette(false);
+}
+
+QGtk3Theme::~QGtk3Theme()
+{
+    g_signal_handlers_disconnect_by_data(gtk_settings_get_default(), this);
+    if (m_gnomeSettings) {
+        g_signal_handlers_disconnect_by_data(m_gnomeSettings, this);
+        g_object_unref(m_gnomeSettings);
+    }
+}
+
+static QColor qtGtkColor(const GdkRGBA &color)
+{
+    return QColor::fromRgbF(qBound(0.0, color.red, 1.0), qBound(0.0, color.green, 1.0),
+                           qBound(0.0, color.blue, 1.0), qBound(0.0, color.alpha, 1.0));
+}
+
+static QColor gtkNamedColor(GtkStyleContext *context, const char *name, const QColor &fallback)
+{
+    GdkRGBA color;
+    return gtk_style_context_lookup_color(context, name, &color) && color.alpha > 0
+        ? qtGtkColor(color) : fallback;
+}
+
+static QColor gtkForeground(GtkStyleContext *context, GtkStateFlags state)
+{
+    GdkRGBA color;
+    gtk_style_context_get_color(context, state, &color);
+    return qtGtkColor(color);
+}
+
+static QColor gtkBackground(GtkStyleContext *context, GtkStateFlags state, const QColor &fallback)
+{
+    GdkRGBA color;
+    gtk_style_context_get_background_color(context, state, &color);
+    if (color.alpha <= 0)
+        return fallback;
+    // GTK backgrounds can be translucent; Qt's base brushes must be opaque.
+    return QColor::fromRgbF(color.red * color.alpha + fallback.redF() * (1 - color.alpha),
+                           color.green * color.alpha + fallback.greenF() * (1 - color.alpha),
+                           color.blue * color.alpha + fallback.blueF() * (1 - color.alpha));
+}
+
+void QGtk3Theme::updatePalette(bool notify)
+{
+    if (m_updatingPalette)
+        return;
+    m_updatingPalette = true;
+    if (m_gnomeSettings) {
+        gchar *scheme = g_settings_get_string(static_cast<GSettings *>(m_gnomeSettings), "color-scheme");
+        g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme",
+                     g_strcmp0(scheme, "prefer-dark") == 0, nullptr);
+        g_free(scheme);
+    }
+
+    // Unmapped widgets provide CSS contexts without creating visible GTK windows.
+    GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_container_add(GTK_CONTAINER(window), box);
+    GtkWidget *entry = gtk_entry_new();
+    GtkWidget *button = gtk_button_new();
+    GtkWidget *view = gtk_text_view_new();
+    for (GtkWidget *widget : {entry, button, view})
+        gtk_container_add(GTK_CONTAINER(box), widget);
+    GtkStyleContext *wc = gtk_widget_get_style_context(window);
+    GtkStyleContext *ec = gtk_widget_get_style_context(entry);
+    GtkStyleContext *bc = gtk_widget_get_style_context(button);
+    GtkStyleContext *vc = gtk_widget_get_style_context(view);
+    GtkWidget *tooltip = gtk_window_new(GTK_WINDOW_POPUP);
+    GtkStyleContext *tc = gtk_widget_get_style_context(tooltip);
+    gtk_style_context_add_class(tc, GTK_STYLE_CLASS_TOOLTIP);
+
+    for (QPalette::ColorGroup group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
+        const auto state = group == QPalette::Disabled ? GTK_STATE_FLAG_INSENSITIVE
+            : group == QPalette::Inactive ? GTK_STATE_FLAG_BACKDROP : GTK_STATE_FLAG_NORMAL;
+        for (GtkStyleContext *context : {wc, ec, bc, vc, tc})
+            gtk_style_context_set_state(context, state);
+        const QColor windowText = gtkForeground(wc, state);
+        const QColor windowColor = gtkBackground(wc, state,
+            gtkNamedColor(wc, "theme_bg_color", m_palette.color(group, QPalette::Window)));
+        const QColor base = gtkBackground(ec, state, gtkNamedColor(ec, "theme_base_color", windowColor));
+        const QColor text = gtkForeground(ec, state);
+        const QColor buttonColor = gtkBackground(bc, state, windowColor);
+        const QColor buttonText = gtkForeground(bc, state);
+        const QColor highlight = gtkNamedColor(vc,
+            group == QPalette::Inactive ? "theme_unfocused_selected_bg_color" : "theme_selected_bg_color",
+            gtkNamedColor(vc, "theme_selected_bg_color", m_palette.color(group, QPalette::Highlight)));
+        const QColor highlightedText = gtkNamedColor(vc,
+            group == QPalette::Inactive ? "theme_unfocused_selected_fg_color" : "theme_selected_fg_color",
+            gtkNamedColor(vc, "theme_selected_fg_color", m_palette.color(group, QPalette::HighlightedText)));
+        m_palette.setColor(group, QPalette::Window, windowColor);
+        m_palette.setColor(group, QPalette::WindowText, windowText);
+        m_palette.setColor(group, QPalette::Base, base);
+        m_palette.setColor(group, QPalette::Text, text);
+        m_palette.setColor(group, QPalette::Button, buttonColor);
+        m_palette.setColor(group, QPalette::ButtonText, buttonText);
+        m_palette.setColor(group, QPalette::Highlight, highlight);
+        m_palette.setColor(group, QPalette::HighlightedText, highlightedText);
+        m_palette.setColor(group, QPalette::AlternateBase, QColor::fromRgbF(
+            (base.redF() + windowColor.redF()) / 2, (base.greenF() + windowColor.greenF()) / 2,
+            (base.blueF() + windowColor.blueF()) / 2));
+        m_palette.setColor(group, QPalette::Light, windowColor.lighter(150));
+        m_palette.setColor(group, QPalette::Midlight, windowColor.lighter(120));
+        m_palette.setColor(group, QPalette::Mid, windowColor.darker(130));
+        m_palette.setColor(group, QPalette::Dark, windowColor.darker(160));
+        m_palette.setColor(group, QPalette::Shadow, windowColor.darker(200));
+        m_palette.setColor(group, QPalette::Link, gtkNamedColor(vc, "link_color", text));
+        m_palette.setColor(group, QPalette::LinkVisited, gtkNamedColor(vc, "visited_link_color", text));
+        const QColor tooltipBase = gtkBackground(tc, state,
+            gtkNamedColor(tc, "theme_tooltip_bg_color", windowColor));
+        const QColor tooltipText = gtkForeground(tc, state);
+        m_palette.setColor(group, QPalette::ToolTipBase, tooltipBase);
+        m_palette.setColor(group, QPalette::ToolTipText, tooltipText);
+    }
+    m_tooltipPalette = m_palette;
+    for (QPalette::ColorGroup group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
+        const auto background = m_palette.color(group, QPalette::ToolTipBase);
+        const auto foreground = m_palette.color(group, QPalette::ToolTipText);
+        m_tooltipPalette.setColor(group, QPalette::Window, background);
+        m_tooltipPalette.setColor(group, QPalette::WindowText, foreground);
+        m_tooltipPalette.setColor(group, QPalette::Base, background);
+        m_tooltipPalette.setColor(group, QPalette::Text, foreground);
+    }
+    gtk_widget_destroy(tooltip);
+    gtk_widget_destroy(window);
+    m_updatingPalette = false;
+    if (notify)
+        QWindowSystemInterface::handleThemeChange(nullptr);
+}
+
+const QPalette *QGtk3Theme::palette(Palette type) const
+{
+    if (type == SystemPalette)
+        return &m_palette;
+    if (type == ToolTipPalette)
+        return &m_tooltipPalette;
+    return QGnomeTheme::palette(type);
 }
 
 static inline QVariant gtkGetLongPressTime()

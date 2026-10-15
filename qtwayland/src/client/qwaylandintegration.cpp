@@ -97,30 +97,8 @@ class GenericWaylandTheme: public QGenericUnixTheme
 public:
     static QStringList themeNames()
     {
-        QStringList result;
-
-        if (QGuiApplication::desktopSettingsAware()) {
-            const QByteArray desktopEnvironment = QGuiApplicationPrivate::platformIntegration()->services()->desktopEnvironment();
-
-            if (desktopEnvironment == QByteArrayLiteral("KDE")) {
-#if QT_CONFIG(settings)
-                result.push_back(QStringLiteral("kde"));
-#endif
-            } else if (!desktopEnvironment.isEmpty() &&
-                desktopEnvironment != QByteArrayLiteral("UNKNOWN") &&
-                desktopEnvironment != QByteArrayLiteral("GNOME") &&
-                desktopEnvironment != QByteArrayLiteral("UNITY") &&
-                desktopEnvironment != QByteArrayLiteral("MATE") &&
-                desktopEnvironment != QByteArrayLiteral("XFCE") &&
-                desktopEnvironment != QByteArrayLiteral("LXDE"))
-                // Ignore X11 desktop environments
-                result.push_back(QString::fromLocal8Bit(desktopEnvironment.toLower()));
-        }
-
-        if (result.isEmpty())
-            result.push_back(QLatin1String(QGenericUnixTheme::name));
-
-        return result;
+        // GTK desktop settings apply to both native Wayland and XWayland clients.
+        return QGenericUnixTheme::themeNames();
     }
 };
 

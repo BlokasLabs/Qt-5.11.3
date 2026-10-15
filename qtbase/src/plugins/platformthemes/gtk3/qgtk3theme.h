@@ -41,6 +41,7 @@
 #define QGTK3THEME_H
 
 #include <private/qgenericunixthemes_p.h>
+#include <QtGui/QPalette>
 
 QT_BEGIN_NAMESPACE
 
@@ -48,6 +49,9 @@ class QGtk3Theme : public QGnomeTheme
 {
 public:
     QGtk3Theme();
+    ~QGtk3Theme();
+    static bool initialize();
+    const QPalette *palette(Palette type = SystemPalette) const override;
 
     virtual QVariant themeHint(ThemeHint hint) const override;
     virtual QString gtkFontName() const override;
@@ -61,6 +65,11 @@ public:
     static const char *name;
 private:
     static bool useNativeFileDialog();
+    void updatePalette(bool notify = true);
+    QPalette m_palette;
+    QPalette m_tooltipPalette;
+    void *m_gnomeSettings = nullptr;
+    bool m_updatingPalette = false;
 };
 
 QT_END_NAMESPACE

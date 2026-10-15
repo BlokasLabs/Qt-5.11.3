@@ -15,4 +15,4 @@ ${QTDIR}/configure -prefix ${PREFIX} -opensource -confirm-license -platform linu
 	-no-feature-big_codecs -no-feature-iconv -no-feature-ftp -no-feature-udpsocket -no-feature-networkproxy -no-feature-socks5 -no-feature-networkdiskcache \
 	-no-feature-bearermanagement -skip qttools -feature-wayland-client -no-feature-wayland-server -no-eglfs \
 	-no-feature-wayland-ivi-shell -no-feature-wayland-server-buffer -no-feature-xcomposite-egl -no-feature-xcomposite-glx \
-	-no-linuxfb -no-feature-vnc "$@"
+	-no-linuxfb -no-feature-vnc -gtk "$@"
