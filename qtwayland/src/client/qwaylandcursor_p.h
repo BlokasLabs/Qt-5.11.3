@@ -118,12 +118,10 @@ private:
     };
 
     struct wl_cursor* requestCursor(WaylandCursor shape);
-    void initCursorMap();
     QWaylandDisplay *mDisplay = nullptr;
     struct wl_cursor_theme *mCursorTheme = nullptr;
     QPoint mLastPos;
     QMap<WaylandCursor, wl_cursor *> mCursors;
-    QMultiMap<WaylandCursor, QByteArray> mCursorNamesMap;
 };
 
 }
