@@ -6,6 +6,8 @@ qtConfig(xkbcommon-evdev): \
     QMAKE_USE_PRIVATE += xkbcommon_evdev
 
 WAYLANDCLIENTSOURCES += \
+    ../../../3rdparty/protocol/xdg-toplevel-drag-v1.xml \
+    ../../../3rdparty/protocol/plasma-shell.xml \
     ../../../3rdparty/protocol/xdg-toplevel-icon-v1.xml \
     ../../../3rdparty/protocol/xdg-decoration-unstable-v1.xml \
     ../../../3rdparty/protocol/xdg-shell-stable.xml

@@ -53,6 +53,8 @@
 //
 
 #include "qwayland-xdg-shell-stable.h"
+#include "qwayland-xdg-toplevel-drag-v1.h"
+#include "qwayland-plasma-shell.h"
 
 #include "qwaylandxdgdecorationv1_p.h"
 #include "qwaylandxdgtopleveliconv1_p.h"
@@ -86,6 +88,8 @@ public:
     void resize(QWaylandInputDevice *inputDevice, enum xdg_toplevel_resize_edge edges);
     void resize(QWaylandInputDevice *inputDevice, enum wl_shell_surface_resize edges) override;
     bool move(QWaylandInputDevice *inputDevice) override;
+    QWaylandToplevelDrag *startToplevelDrag(struct ::wl_data_source *source, const QPoint &offset) override;
+    bool supportsToplevelDrag() const override;
     void setTitle(const QString &title) override;
     void setAppId(const QString &appId) override;
     void setIcon(const QIcon &icon) override;
@@ -151,6 +155,7 @@ private:
     QWaylandXdgShellStable *m_shell = nullptr;
     QWaylandWindow *m_window = nullptr;
     Toplevel *m_toplevel = nullptr;
+    QScopedPointer<QtWayland::org_kde_plasma_surface> m_plasmaSurface;
     Popup *m_popup = nullptr;
     bool m_configured = false;
     QRegion m_exposeRegion;
@@ -179,6 +184,8 @@ private:
     QWaylandDisplay *m_display = nullptr;
     QScopedPointer<QWaylandXdgDecorationManagerV1> m_xdgDecorationManager;
     QScopedPointer<QWaylandXdgToplevelIconManagerV1> m_iconManager;
+    QScopedPointer<QtWayland::xdg_toplevel_drag_manager_v1> m_toplevelDragManager;
+    QScopedPointer<QtWayland::org_kde_plasma_shell> m_plasmaShell;
     QWaylandXdgSurfaceStable::Popup *m_topmostGrabbingPopup = nullptr;
 
     friend class QWaylandXdgSurfaceStable;

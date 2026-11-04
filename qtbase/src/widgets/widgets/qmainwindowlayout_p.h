@@ -570,6 +570,11 @@ public:
 #endif
 
     void hover(QLayoutItem *widgetItem, const QPoint &mousePos);
+#if QT_CONFIG(draganddrop)
+    static bool needsPlatformDrag();
+    Qt::DropAction performPlatformWidgetDrag(QLayoutItem *item, const QPoint &pressPos, bool allowDocking);
+    QLayoutItem *draggingWidget = nullptr;
+#endif
     bool plug(QLayoutItem *widgetItem);
     QLayoutItem *unplug(QWidget *widget, bool group = false);
     void revert(QLayoutItem *widgetItem);

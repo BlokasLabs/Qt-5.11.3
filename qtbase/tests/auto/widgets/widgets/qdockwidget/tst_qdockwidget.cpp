@@ -35,10 +35,21 @@
 #include <qdockwidget.h>
 #include <qmainwindow.h>
 #include <qlineedit.h>
+#include <qlabel.h>
 #include <qtabbar.h>
 #include <QDesktopWidget>
 #include <QtGui/QPainter>
 #include "private/qdockwidget_p.h"
+#include "private/qwidgetresizehandler_p.h"
+#include <private/qguiapplication_p.h>
+#include <private/qwindow_p.h>
+#include <private/qdnd_p.h>
+#include <qpa/qplatformintegration.h>
+#include <qpa/qplatformnativeinterface.h>
+#include <qpa/qplatformwindow.h>
+#include <qpa/qplatformdrag.h>
+#include <QDrag>
+#include <QScopedValueRollback>
 
 bool hasFeature(QDockWidget *dockwidget, QDockWidget::DockWidgetFeature feature)
 { return (dockwidget->features() & feature) == feature; }
@@ -68,6 +79,11 @@ private slots:
     void dockLocationChanged();
     void setTitleBarWidget();
     void titleBarDoubleClick();
+    void waylandFloatingMove();
+    void waylandBorderResize_data();
+    void waylandBorderResize();
+    void platformDockDrag_data();
+    void platformDockDrag();
     void restoreStateOfFloating();
     void restoreDockWidget();
     void restoreStateWhileStillFloating();
@@ -727,6 +743,248 @@ void tst_QDockWidget::titleBarDoubleClick()
     QApplication::sendEvent(&dock, &e);
     QVERIFY(!dock.isFloating());
     QCOMPARE(win.dockWidgetArea(&dock), Qt::TopDockWidgetArea);
+}
+
+class MoveRecordingWindow : public QPlatformWindow
+{
+public:
+    explicit MoveRecordingWindow(QWindow *window) : QPlatformWindow(window) {}
+    bool startSystemMove(const QPoint &pos) override
+    {
+        ++moves;
+        pressPos = pos;
+        return true;
+    }
+    int moves = 0;
+    QPoint pressPos;
+};
+
+void tst_QDockWidget::waylandFloatingMove()
+{
+    QMainWindow win;
+    QDockWidget dock(&win);
+    // A custom title bar selects the client-side path on the test platform too.
+    QWidget *title = new QLabel(QStringLiteral("Dock title"));
+    title->setFixedSize(200, 30);
+    dock.setTitleBarWidget(title);
+    win.addDockWidget(Qt::LeftDockWidgetArea, &dock);
+    win.show();
+    dock.setFloating(true);
+    QCoreApplication::processEvents();
+    QVERIFY(dock.windowHandle());
+    auto layout = qobject_cast<QDockWidgetLayout *>(dock.layout());
+    QVERIFY(layout);
+    const QPoint pressPos = layout->titleArea().center();
+    const QPoint movePos = pressPos + QPoint(QApplication::startDragDistance() + 1, 0);
+    const QRect geometry = dock.geometry();
+    int moves = 0;
+    QPoint systemPressPos;
+    {
+        MoveRecordingWindow platformWindow(dock.windowHandle());
+        QScopedValueRollback<QPlatformWindow *> handle(
+            QWindowPrivate::get(dock.windowHandle())->platformWindow, &platformWindow);
+        QScopedValueRollback<QString> platform(*QGuiApplicationPrivate::platform_name,
+                                               QStringLiteral("wayland-egl"));
+        for (int i = 1; i <= 2; ++i) {
+            QMouseEvent press(QEvent::MouseButtonPress, pressPos, dock.mapToGlobal(pressPos), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&dock, &press);
+            QMouseEvent move(QEvent::MouseMove, movePos, dock.mapToGlobal(movePos), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&dock, &move);
+            if (platformWindow.moves != i)
+                break;
+            // The compositor can consume the release. The next press must
+            // still start a move, without leaving Qt in an unplugged drag.
+        }
+        moves = platformWindow.moves;
+        systemPressPos = platformWindow.pressPos;
+    }
+    // Restore the real platform handle before cleanup, including on failure.
+    QMouseEvent release(QEvent::MouseButtonRelease, movePos, dock.mapToGlobal(movePos), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(&dock, &release);
+    QCOMPARE(moves, 2);
+    QCOMPARE(systemPressPos, pressPos);
+    QVERIFY(dock.isFloating());
+    QCOMPARE(dock.geometry(), geometry);
+    QMouseEvent dblClick(QEvent::MouseButtonDblClick, pressPos, dock.mapToGlobal(pressPos), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(&dock, &dblClick);
+    QVERIFY(!dock.isFloating());
+}
+
+class ResizeRecordingInterface : public QPlatformNativeInterface
+{
+public:
+    QFunctionPointer platformFunction(const QByteArray &name) const override
+    {
+        return name == "waylandStartSystemResize" ? QFunctionPointer(resize) : nullptr;
+    }
+    static bool resize(QWindow *, Qt::Edges edges) { recordedEdges = edges; return true; }
+    static Qt::Edges recordedEdges;
+};
+Qt::Edges ResizeRecordingInterface::recordedEdges;
+
+class ResizeRecordingIntegration : public QPlatformIntegration
+{
+public:
+    QPlatformWindow *createPlatformWindow(QWindow *) const override { return nullptr; }
+    QPlatformBackingStore *createPlatformBackingStore(QWindow *) const override { return nullptr; }
+    QAbstractEventDispatcher *createEventDispatcher() const override { return nullptr; }
+    QPlatformNativeInterface *nativeInterface() const override { return &interface; }
+    mutable ResizeRecordingInterface interface;
+};
+
+void tst_QDockWidget::waylandBorderResize_data()
+{
+    QTest::addColumn<QPoint>("point");
+    QTest::addColumn<int>("edges");
+    QTest::newRow("top") << QPoint(100, 1) << int(Qt::TopEdge);
+    QTest::newRow("bottom") << QPoint(100, 199) << int(Qt::BottomEdge);
+    QTest::newRow("left") << QPoint(1, 100) << int(Qt::LeftEdge);
+    QTest::newRow("right") << QPoint(199, 100) << int(Qt::RightEdge);
+    QTest::newRow("top-left") << QPoint(1, 1) << int(Qt::TopEdge | Qt::LeftEdge);
+    QTest::newRow("top-right") << QPoint(199, 1) << int(Qt::TopEdge | Qt::RightEdge);
+    QTest::newRow("bottom-left") << QPoint(1, 199) << int(Qt::BottomEdge | Qt::LeftEdge);
+    QTest::newRow("bottom-right") << QPoint(199, 199) << int(Qt::BottomEdge | Qt::RightEdge);
+}
+
+void tst_QDockWidget::waylandBorderResize()
+{
+    QFETCH(QPoint, point);
+    QFETCH(int, edges);
+    QWidget widget;
+    widget.resize(200, 200);
+    widget.show();
+    QCoreApplication::processEvents();
+    QWidgetResizeHandler handler(&widget);
+    handler.setMovingEnabled(false);
+    QMouseEvent hover(QEvent::MouseMove, point, widget.mapToGlobal(point), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(&widget, &hover);
+    const QRect geometry = widget.geometry();
+    ResizeRecordingIntegration integration;
+    QScopedValueRollback<QPlatformIntegration *> platformIntegration(
+        QGuiApplicationPrivate::platform_integration, &integration);
+    QScopedValueRollback<QString> platform(*QGuiApplicationPrivate::platform_name,
+                                           QStringLiteral("wayland"));
+    ResizeRecordingInterface::recordedEdges = Qt::Edges();
+    QMouseEvent press(QEvent::MouseButtonPress, point, widget.mapToGlobal(point), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(&widget, &press);
+    QCOMPARE(int(ResizeRecordingInterface::recordedEdges), edges);
+    QVERIFY(!handler.isButtonDown());
+    QMouseEvent move(QEvent::MouseMove, point + QPoint(20, 20), widget.mapToGlobal(point + QPoint(20, 20)),
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(&widget, &move);
+    QCOMPARE(widget.geometry(), geometry);
+}
+
+class DockDragRecorder : public QPlatformDrag
+{
+public:
+    QMainWindow *mainWindow = nullptr;
+    QPoint dropPosition;
+    bool cancel = false;
+    bool accepted = false;
+    bool windowMatches = false;
+    int calls = 0;
+    Qt::DropAction drag(QDrag *drag) override
+    {
+        ++calls;
+        auto dock = qobject_cast<QDockWidget *>(drag->source());
+        windowMatches = dock && dock->isFloating()
+            && drag->property("_q_waylandDockWindow").value<QObject *>() == dock->windowHandle();
+        if (cancel)
+            return Qt::IgnoreAction;
+        QDragEnterEvent enter(dropPosition, Qt::MoveAction, drag->mimeData(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(mainWindow, &enter);
+        QDragMoveEvent move(dropPosition, Qt::MoveAction, drag->mimeData(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(mainWindow, &move);
+        QDropEvent drop(dropPosition, Qt::MoveAction, drag->mimeData(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(mainWindow, &drop);
+        accepted = enter.isAccepted() && move.isAccepted() && drop.isAccepted();
+        return accepted ? Qt::MoveAction : Qt::IgnoreAction;
+    }
+};
+
+class DockDragInterface : public QPlatformNativeInterface
+{
+public:
+    QFunctionPointer platformFunction(const QByteArray &name) const override
+    {
+        return name == "waylandSupportsToplevelDrag" ? QFunctionPointer(supported) : nullptr;
+    }
+    static bool supported() { return true; }
+};
+
+class DockDragIntegration : public QPlatformIntegration
+{
+public:
+    QPlatformIntegration *real = QGuiApplicationPrivate::platformIntegration();
+    mutable DockDragRecorder recorder;
+    mutable DockDragInterface interface;
+    QPlatformWindow *createPlatformWindow(QWindow *w) const override { return real->createPlatformWindow(w); }
+    QPlatformBackingStore *createPlatformBackingStore(QWindow *w) const override { return real->createPlatformBackingStore(w); }
+    QAbstractEventDispatcher *createEventDispatcher() const override { return real->createEventDispatcher(); }
+    QPlatformFontDatabase *fontDatabase() const override { return real->fontDatabase(); }
+    bool hasCapability(Capability cap) const override { return real->hasCapability(cap); }
+    QVariant styleHint(StyleHint hint) const override { return real->styleHint(hint); }
+    QPlatformDrag *drag() const override { return &recorder; }
+    QPlatformNativeInterface *nativeInterface() const override { return &interface; }
+};
+
+void tst_QDockWidget::platformDockDrag_data()
+{
+    QTest::addColumn<bool>("floating");
+    QTest::addColumn<bool>("cancel");
+    QTest::newRow("docked-to-other-region") << false << false;
+    QTest::newRow("floating-to-dock") << true << false;
+    QTest::newRow("cancel-undock") << false << true;
+    QTest::newRow("cancel-floating-drag") << true << true;
+}
+
+void tst_QDockWidget::platformDockDrag()
+{
+    QFETCH(bool, floating);
+    QFETCH(bool, cancel);
+    QMainWindow main;
+    main.setDockOptions(QMainWindow::AllowTabbedDocks);
+    main.setAcceptDrops(true);
+    main.resize(800, 600);
+    main.setCentralWidget(new QLabel(QStringLiteral("Center")));
+    QDockWidget dock(&main);
+    dock.setTitleBarWidget(new QLabel(QStringLiteral("Dock title")));
+    dock.setWidget(new QLabel(QStringLiteral("Dock content")));
+    main.addDockWidget(Qt::LeftDockWidgetArea, &dock);
+    main.show();
+    dock.setFloating(floating);
+    QCoreApplication::processEvents();
+    DockDragIntegration integration;
+    integration.recorder.mainWindow = &main;
+    integration.recorder.cancel = cancel;
+    integration.recorder.dropPosition = QPoint(main.width() - 5, main.height() / 2);
+    // The manager caches the integration's drag object. Do not retain a test
+    // backend beyond the scope that owns it, or reuse one from an earlier row.
+    delete QDragManager::self();
+    {
+        QScopedValueRollback<QPlatformIntegration *> platformIntegration(
+            QGuiApplicationPrivate::platform_integration, &integration);
+        QScopedValueRollback<QString> platform(*QGuiApplicationPrivate::platform_name,
+                                               QStringLiteral("wayland"));
+        auto layout = qobject_cast<QDockWidgetLayout *>(dock.layout());
+        const QPoint pos = layout->titleArea().center();
+        QMouseEvent press(QEvent::MouseButtonPress, pos, dock.mapToGlobal(pos), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(&dock, &press);
+        const QPoint moved = pos + QPoint(QApplication::startDragDistance() + 1, 0);
+        QMouseEvent move(QEvent::MouseMove, moved, dock.mapToGlobal(moved), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(&dock, &move);
+        delete QDragManager::self();
+    }
+    QCOMPARE(integration.recorder.calls, 1);
+    QVERIFY(integration.recorder.windowMatches);
+    QCOMPARE(dock.isFloating(), cancel && floating);
+    if (!cancel) {
+        QVERIFY(integration.recorder.accepted);
+        QCOMPARE(main.dockWidgetArea(&dock), Qt::RightDockWidgetArea);
+    } else if (!floating) {
+        QCOMPARE(main.dockWidgetArea(&dock), Qt::LeftDockWidgetArea);
+    }
 }
 
 static QDockWidget *createTestDock(QMainWindow &parent)

@@ -1070,8 +1070,48 @@ void QWaylandWindow::addAttachOffset(const QPoint point)
 bool QtWaylandClient::QWaylandWindow::startSystemMove(const QPoint &pos)
 {
     Q_UNUSED(pos);
-    if (auto seat = display()->lastInputDevice())
-        return mShellSurface && mShellSurface->move(seat);
+    if (auto seat = display()->lastInputDevice()) {
+        if (mShellSurface && mShellSurface->move(seat)) {
+            seat->removeMouseButtonFromState(Qt::LeftButton);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool QWaylandWindow::startSystemResize(Qt::Edges edges)
+{
+    if (!edges || (edges & Qt::LeftEdge && edges & Qt::RightEdge)
+            || (edges & Qt::TopEdge && edges & Qt::BottomEdge))
+        return false;
+
+    auto seat = display()->lastInputDevice();
+    if (!seat || !mShellSurface || window()->type() == Qt::Popup)
+        return false;
+
+    uint32_t shellEdges = WL_SHELL_SURFACE_RESIZE_NONE;
+    if (edges & Qt::TopEdge)
+        shellEdges |= WL_SHELL_SURFACE_RESIZE_TOP;
+    if (edges & Qt::BottomEdge)
+        shellEdges |= WL_SHELL_SURFACE_RESIZE_BOTTOM;
+    if (edges & Qt::LeftEdge)
+        shellEdges |= WL_SHELL_SURFACE_RESIZE_LEFT;
+    if (edges & Qt::RightEdge)
+        shellEdges |= WL_SHELL_SURFACE_RESIZE_RIGHT;
+    mShellSurface->resize(seat, static_cast<enum wl_shell_surface_resize>(shellEdges));
+    seat->removeMouseButtonFromState(Qt::LeftButton);
+    return true;
+}
+
+bool QWaylandWindow::startSystemResize(const QPoint &pos, Qt::Corner corner)
+{
+    Q_UNUSED(pos);
+    switch (corner) {
+    case Qt::TopLeftCorner: return startSystemResize(Qt::TopEdge | Qt::LeftEdge);
+    case Qt::TopRightCorner: return startSystemResize(Qt::TopEdge | Qt::RightEdge);
+    case Qt::BottomLeftCorner: return startSystemResize(Qt::BottomEdge | Qt::LeftEdge);
+    case Qt::BottomRightCorner: return startSystemResize(Qt::BottomEdge | Qt::RightEdge);
+    }
     return false;
 }
 

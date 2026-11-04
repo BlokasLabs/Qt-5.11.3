@@ -1,6 +1,36 @@
 Stable xdg-shell client backport
 ===============================
 
+Dock dragging and tool-window grouping:
+- QDockWidget uses a platform drag on compositors advertising
+  xdg-toplevel-drag-v1. The compositor moves the actual floating surface while
+  QMainWindow receives drag-enter/move/leave/drop events in its own coordinates.
+  This applies both to a panel being undocked and to an already floating panel.
+  The original surface stays mapped when starting a drag from a floating panel.
+- The platform-drag flow follows upstream Qt's QDockWidget/QMainWindowLayout
+  design. The window reference is passed as an in-process QDrag property, not
+  a pointer serialized into MIME data.
+- The four core data-device protocol interfaces are updated to version 3
+  (definitions from Wayland 1.23.1). Drop-performed, finished, and cancelled
+  events distinguish a drop outside the main window from Escape cancellation.
+- xdg-toplevel-drag-v1.xml is from wayland-protocols, staging/xdg-toplevel-drag.
+  plasma-shell.xml is from KDE plasma-wayland-protocols, src/protocols. Their
+  upstream copyright/license notices are retained in the XML files.
+- On KWin, transient Qt::Tool windows request skip-taskbar and skip-switcher
+  through org_kde_plasma_surface. The main window keeps its normal switcher
+  entry. This optional metadata does not change the xdg_toplevel parent.
+- Compositors/shell integrations without toplevel-drag support retain the
+  compositor-move fallback: use the re-dock button or title-bar double-click.
+
+Regression checks: tst_qdockwidget platformDockDrag covers docked/floating
+drags into a different dock area and cancellation in either starting state.
+waylandBorderResize covers all eight resize handles. Run these at scale 1 and
+with QT_SCALE_FACTOR=2. A real compositor is also required to check that the
+panel tracks the pointer during the initial undock, remains at the release
+position, and can be re-docked by a subsequent drag. Validate KWin's
+skipSwitcher/skipTaskbar flags for the floating panel, not just the protocol
+requests. The main window must remain switchable.
+
 Window icons: the plugin also implements xdg-toplevel-icon-v1 using the
 vendored XML from wayland-protocols. When the compositor advertises this
 optional protocol, initial and updated QWindow icons are sent as shared-memory

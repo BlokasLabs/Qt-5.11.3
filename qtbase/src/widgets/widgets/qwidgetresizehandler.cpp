@@ -49,6 +49,7 @@
 #endif
 #include "qevent.h"
 #include "qdebug.h"
+#include <qwindow.h>
 #include "private/qlayoutengine_p.h"
 
 QT_BEGIN_NAMESPACE
@@ -145,6 +146,37 @@ bool QWidgetResizeHandler::eventFilter(QObject *o, QEvent *ee)
             movingEnabled = (me && o == widget);
             mouseMoveEvent(e);
             movingEnabled = me;
+            // Wayland does not expose global window positions. Let the
+            // compositor resize borders/corners instead of setGeometry().
+            if (widget->isWindow()
+                    && QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive)) {
+                Qt::Edges edges;
+                switch (mode) {
+                case TopLeft: edges = Qt::TopEdge | Qt::LeftEdge; break;
+                case TopRight: edges = Qt::TopEdge | Qt::RightEdge; break;
+                case BottomLeft: edges = Qt::BottomEdge | Qt::LeftEdge; break;
+                case BottomRight: edges = Qt::BottomEdge | Qt::RightEdge; break;
+                case Top: edges = Qt::TopEdge; break;
+                case Bottom: edges = Qt::BottomEdge; break;
+                case Left: edges = Qt::LeftEdge; break;
+                case Right: edges = Qt::RightEdge; break;
+                default: break;
+                }
+                if (edges) {
+                    QWindow *window = widget->windowHandle();
+                    // Qt 5.11's QPA resize API only accepts corners. Use a
+                    // platform function for edges without changing its ABI.
+                    typedef bool (*StartSystemResize)(QWindow *, Qt::Edges);
+                    const auto resize = reinterpret_cast<StartSystemResize>(
+                        QGuiApplication::platformFunction(QByteArrayLiteral("waylandStartSystemResize")));
+                    if (window && resize)
+                        resize(window, edges);
+                    // Do not fall back to synthetic global coordinates even
+                    // if the compositor cannot start the operation.
+                    moveResizeMode = false;
+                    return true;
+                }
+            }
             buttonDown = true;
             moveOffset = widget->mapFromGlobal(e->globalPos());
             invertedMoveOffset = widget->rect().bottomRight() - moveOffset;

@@ -206,6 +206,8 @@ public:
     void addAttachOffset(const QPoint point);
 
     bool startSystemMove(const QPoint &pos) override;
+    bool startSystemResize(Qt::Edges edges);
+    bool startSystemResize(const QPoint &pos, Qt::Corner corner) override;
 
     void requestUpdate() override;
 

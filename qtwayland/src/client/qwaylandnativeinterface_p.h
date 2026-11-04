@@ -91,6 +91,8 @@ private:
     static void setSync(QWindow *window);
     static void setDeSync(QWindow *window);
     static bool isSync(QWindow *window);
+    static bool startSystemResize(QWindow *window, Qt::Edges edges);
+    static bool supportsToplevelDrag();
 };
 
 }

@@ -167,6 +167,12 @@ void QWaylandNativeInterface::emitWindowPropertyChanged(QPlatformWindow *window,
 
 QFunctionPointer QWaylandNativeInterface::platformFunction(const QByteArray &resource) const
 {
+    if (resource == QByteArrayLiteral("waylandSupportsToplevelDrag"))
+        return QFunctionPointer(supportsToplevelDrag);
+    // Private QtWidgets hook: bool (QWindow *, Qt::Edges). Qt 5.11's
+    // QPlatformWindow::startSystemResize only supports corners.
+    if (resource == QByteArrayLiteral("waylandStartSystemResize"))
+        return QFunctionPointer(startSystemResize);
     if (resource == QWaylandWindowFunctions::setSyncIdentifier()) {
         return QFunctionPointer(setSync);
     } else if (resource == QWaylandWindowFunctions::setDeSyncIdentifier()) {
@@ -177,6 +183,22 @@ QFunctionPointer QWaylandNativeInterface::platformFunction(const QByteArray &res
     return nullptr;
 }
 
+bool QWaylandNativeInterface::startSystemResize(QWindow *window, Qt::Edges edges)
+{
+    auto waylandWindow = window ? static_cast<QWaylandWindow *>(window->handle()) : nullptr;
+    return waylandWindow && waylandWindow->startSystemResize(edges);
+}
+
+bool QWaylandNativeInterface::supportsToplevelDrag()
+{
+    for (QWindow *window : QGuiApplication::topLevelWindows()) {
+        auto waylandWindow = static_cast<QWaylandWindow *>(window->handle());
+        if (waylandWindow && waylandWindow->shellSurface()
+                && waylandWindow->shellSurface()->supportsToplevelDrag())
+            return true;
+    }
+    return false;
+}
 
 void QWaylandNativeInterface::setSync(QWindow *window)
 {

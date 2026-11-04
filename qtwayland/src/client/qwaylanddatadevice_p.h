@@ -74,6 +74,7 @@ class QWaylandDataOffer;
 class QWaylandDataSource;
 class QWaylandInputDevice;
 class QWaylandWindow;
+class QWaylandToplevelDrag;
 
 class QWaylandDataDevice : public QObject, public QtWayland::wl_data_device
 {
@@ -115,6 +116,11 @@ private Q_SLOTS:
 private:
 #if QT_CONFIG(draganddrop)
     QPoint calculateDragPosition(int x, int y, QWindow *wnd) const;
+    void finishDrag(bool cancelled);
+    QScopedPointer<QWaylandToplevelDrag> m_toplevelDrag;
+    QPointer<QWindow> m_draggedWindow;
+    bool m_dropPerformed = false;
+    Qt::DropAction m_dropAction = Qt::IgnoreAction;
 #endif
 
     QWaylandDisplay *m_display = nullptr;

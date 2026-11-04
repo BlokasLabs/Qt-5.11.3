@@ -71,6 +71,10 @@
 #include <qmap.h>
 #include <qtimer.h>
 #include <qpointer.h>
+#if QT_CONFIG(draganddrop)
+#include <qdrag.h>
+#include <qmimedata.h>
+#endif
 
 #ifndef QT_NO_DEBUG_STREAM
 #  include <qdebug.h>
@@ -2518,6 +2522,35 @@ void QMainWindowLayout::updateGapIndicator()
     }
 #endif // QT_CONFIG(rubberband)
 }
+
+#if QT_CONFIG(draganddrop)
+bool QMainWindowLayout::needsPlatformDrag()
+{
+    typedef bool (*SupportsDrag)();
+    const auto supports = reinterpret_cast<SupportsDrag>(
+        QGuiApplication::platformFunction(QByteArrayLiteral("waylandSupportsToplevelDrag")));
+    return supports && supports();
+}
+
+Qt::DropAction QMainWindowLayout::performPlatformWidgetDrag(QLayoutItem *item,
+                                                           const QPoint &pressPos, bool allowDocking)
+{
+    QPointer<QWidget> mainWindow(parentWidget());
+    QWidget *widget = item->widget();
+    draggingWidget = allowDocking ? item : nullptr;
+    auto drag = new QDrag(widget);
+    auto mimeData = new QMimeData;
+    mimeData->setData(QStringLiteral("application/x-qt-mainwindowdrag"), QByteArray("1"));
+    drag->setMimeData(mimeData);
+    // These are process-local properties, never pointers received through MIME.
+    drag->setProperty("_q_waylandDockWindow", QVariant::fromValue<QObject *>(widget->windowHandle()));
+    drag->setHotSpot(pressPos);
+    const auto result = drag->exec(Qt::MoveAction);
+    if (mainWindow)
+        draggingWidget = nullptr;
+    return result;
+}
+#endif
 
 void QMainWindowLayout::hover(QLayoutItem *widgetItem, const QPoint &mousePos)
 {

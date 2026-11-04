@@ -408,7 +408,7 @@
   </interface>
 
 
-  <interface name="wl_data_offer" version="1">
+  <interface name="wl_data_offer" version="3">
     <description summary="offer to transfer data">
       A wl_data_offer represents a piece of data offered for transfer
       by another client (the source client).  It is used by the
@@ -418,16 +418,36 @@
       data directly from the source client.
     </description>
 
+    <enum name="error">
+      <entry name="invalid_finish" value="0"
+	     summary="finish request was called untimely"/>
+      <entry name="invalid_action_mask" value="1"
+	     summary="action mask contains invalid values"/>
+      <entry name="invalid_action" value="2"
+	     summary="action argument has an invalid value"/>
+      <entry name="invalid_offer" value="3"
+	     summary="offer doesn't accept this request"/>
+    </enum>
+
     <request name="accept">
       <description summary="accept one of the offered mime types">
 	Indicate that the client can accept the given mime type, or
 	NULL for not accepted.
 
-	Used for feedback during drag-and-drop.
-      </description>
+	For objects of version 2 or older, this request is used by the
+	client to give feedback whether the client can receive the given
+	mime type, or NULL if none is accepted; the feedback does not
+	determine whether the drag-and-drop operation succeeds or not.
 
-      <arg name="serial" type="uint"/>
-      <arg name="mime_type" type="string" allow-null="true"/>
+	For objects of version 3 or newer, this request determines the
+	final result of the drag-and-drop operation. If the end result
+	is that no mime types were accepted, the drag-and-drop operation
+	will be cancelled and the corresponding drag source will receive
+	wl_data_source.cancelled. Clients may still use this event in
+	conjunction with wl_data_source.action for feedback.
+      </description>
+      <arg name="serial" type="uint" summary="serial number of the accept request"/>
+      <arg name="mime_type" type="string" allow-null="true" summary="mime type accepted by the client"/>
     </request>
 
     <request name="receive">
@@ -440,11 +460,16 @@
 	file descriptor.
 
 	The receiving client reads from the read end of the pipe until
-	EOF and the closes its end, at which point the transfer is
+	EOF and then closes its end, at which point the transfer is
 	complete.
+
+	This request may happen multiple times for different mime types,
+	both before and after wl_data_device.drop. Drag-and-drop destination
+	clients may preemptively fetch data or examine it more closely to
+	determine acceptance.
       </description>
-      <arg name="mime_type" type="string"/>
-      <arg name="fd" type="fd"/>
+      <arg name="mime_type" type="string" summary="mime type desired by receiver"/>
+      <arg name="fd" type="fd" summary="file descriptor for data transfer"/>
     </request>
 
     <request name="destroy" type="destructor">
@@ -458,12 +483,125 @@
 	Sent immediately after creating the wl_data_offer object.  One
 	event per offered mime type.
       </description>
+      <arg name="mime_type" type="string" summary="offered mime type"/>
+    </event>
 
-      <arg name="mime_type" type="string"/>
+    <!-- Version 3 additions -->
+
+    <request name="finish" since="3">
+      <description summary="the offer will no longer be used">
+	Notifies the compositor that the drag destination successfully
+	finished the drag-and-drop operation.
+
+	Upon receiving this request, the compositor will emit
+	wl_data_source.dnd_finished on the drag source client.
+
+	It is a client error to perform other requests than
+	wl_data_offer.destroy after this one. It is also an error to perform
+	this request after a NULL mime type has been set in
+	wl_data_offer.accept or no action was received through
+	wl_data_offer.action.
+
+	If wl_data_offer.finish request is received for a non drag and drop
+	operation, the invalid_finish protocol error is raised.
+      </description>
+    </request>
+
+    <request name="set_actions" since="3">
+      <description summary="set the available/preferred drag-and-drop actions">
+	Sets the actions that the destination side client supports for
+	this operation. This request may trigger the emission of
+	wl_data_source.action and wl_data_offer.action events if the compositor
+	needs to change the selected action.
+
+	This request can be called multiple times throughout the
+	drag-and-drop operation, typically in response to wl_data_device.enter
+	or wl_data_device.motion events.
+
+	This request determines the final result of the drag-and-drop
+	operation. If the end result is that no action is accepted,
+	the drag source will receive wl_data_source.cancelled.
+
+	The dnd_actions argument must contain only values expressed in the
+	wl_data_device_manager.dnd_actions enum, and the preferred_action
+	argument must only contain one of those values set, otherwise it
+	will result in a protocol error.
+
+	While managing an "ask" action, the destination drag-and-drop client
+	may perform further wl_data_offer.receive requests, and is expected
+	to perform one last wl_data_offer.set_actions request with a preferred
+	action other than "ask" (and optionally wl_data_offer.accept) before
+	requesting wl_data_offer.finish, in order to convey the action selected
+	by the user. If the preferred action is not in the
+	wl_data_offer.source_actions mask, an error will be raised.
+
+	If the "ask" action is dismissed (e.g. user cancellation), the client
+	is expected to perform wl_data_offer.destroy right away.
+
+	This request can only be made on drag-and-drop offers, a protocol error
+	will be raised otherwise.
+      </description>
+      <arg name="dnd_actions" type="uint" summary="actions supported by the destination client"
+	   enum="wl_data_device_manager.dnd_action"/>
+      <arg name="preferred_action" type="uint" summary="action preferred by the destination client"
+	   enum="wl_data_device_manager.dnd_action"/>
+    </request>
+
+    <event name="source_actions" since="3">
+      <description summary="notify the source-side available actions">
+	This event indicates the actions offered by the data source. It
+	will be sent immediately after creating the wl_data_offer object,
+	or anytime the source side changes its offered actions through
+	wl_data_source.set_actions.
+      </description>
+      <arg name="source_actions" type="uint" summary="actions offered by the data source"
+	   enum="wl_data_device_manager.dnd_action"/>
+    </event>
+
+    <event name="action" since="3">
+      <description summary="notify the selected action">
+	This event indicates the action selected by the compositor after
+	matching the source/destination side actions. Only one action (or
+	none) will be offered here.
+
+	This event can be emitted multiple times during the drag-and-drop
+	operation in response to destination side action changes through
+	wl_data_offer.set_actions.
+
+	This event will no longer be emitted after wl_data_device.drop
+	happened on the drag-and-drop destination, the client must
+	honor the last action received, or the last preferred one set
+	through wl_data_offer.set_actions when handling an "ask" action.
+
+	Compositors may also change the selected action on the fly, mainly
+	in response to keyboard modifier changes during the drag-and-drop
+	operation.
+
+	The most recent action received is always the valid one. Prior to
+	receiving wl_data_device.drop, the chosen action may change (e.g.
+	due to keyboard modifiers being pressed). At the time of receiving
+	wl_data_device.drop the drag-and-drop destination must honor the
+	last action received.
+
+	Action changes may still happen after wl_data_device.drop,
+	especially on "ask" actions, where the drag-and-drop destination
+	may choose another action afterwards. Action changes happening
+	at this stage are always the result of inter-client negotiation, the
+	compositor shall no longer be able to induce a different action.
+
+	Upon "ask" actions, it is expected that the drag-and-drop destination
+	may potentially choose a different action and/or mime type,
+	based on wl_data_offer.source_actions and finally chosen by the
+	user (e.g. popping up a menu with the available options). The
+	final wl_data_offer.set_actions and wl_data_offer.accept requests
+	must happen before the call to wl_data_offer.finish.
+      </description>
+      <arg name="dnd_action" type="uint" summary="action selected by the compositor"
+	   enum="wl_data_device_manager.dnd_action"/>
     </event>
   </interface>
 
-  <interface name="wl_data_source" version="1">
+  <interface name="wl_data_source" version="3">
     <description summary="offer to transfer data">
       The wl_data_source object is the source side of a wl_data_offer.
       It is created by the source client in a data transfer and
@@ -471,13 +609,20 @@
       to requests to transfer the data.
     </description>
 
+    <enum name="error">
+      <entry name="invalid_action_mask" value="0"
+	     summary="action mask contains invalid values"/>
+      <entry name="invalid_source" value="1"
+	     summary="source doesn't accept this request"/>
+    </enum>
+
     <request name="offer">
       <description summary="add an offered mime type">
 	This request adds a mime type to the set of mime types
 	advertised to targets.  Can be called several times to offer
 	multiple types.
       </description>
-      <arg name="mime_type" type="string"/>
+      <arg name="mime_type" type="string" summary="mime type offered by the data source"/>
     </request>
 
     <request name="destroy" type="destructor">
@@ -493,8 +638,7 @@
 
 	Used for feedback during drag-and-drop.
       </description>
-
-      <arg name="mime_type" type="string" allow-null="true"/>
+      <arg name="mime_type" type="string" allow-null="true" summary="mime type accepted by the target"/>
     </event>
 
     <event name="send">
@@ -503,21 +647,116 @@
 	specified mime type over the passed file descriptor, then
 	close it.
       </description>
-
-      <arg name="mime_type" type="string"/>
-      <arg name="fd" type="fd"/>
+      <arg name="mime_type" type="string" summary="mime type for the data"/>
+      <arg name="fd" type="fd" summary="file descriptor for the data"/>
     </event>
 
     <event name="cancelled">
       <description summary="selection was cancelled">
-	This data source has been replaced by another data source.
+	This data source is no longer valid. There are several reasons why
+	this could happen:
+
+	- The data source has been replaced by another data source.
+	- The drag-and-drop operation was performed, but the drop destination
+	  did not accept any of the mime types offered through
+	  wl_data_source.target.
+	- The drag-and-drop operation was performed, but the drop destination
+	  did not select any of the actions present in the mask offered through
+	  wl_data_source.action.
+	- The drag-and-drop operation was performed but didn't happen over a
+	  surface.
+	- The compositor cancelled the drag-and-drop operation (e.g. compositor
+	  dependent timeouts to avoid stale drag-and-drop transfers).
+
 	The client should clean up and destroy this data source.
+
+	For objects of version 2 or older, wl_data_source.cancelled will
+	only be emitted if the data source was replaced by another data
+	source.
       </description>
     </event>
 
+    <!-- Version 3 additions -->
+
+    <request name="set_actions" since="3">
+      <description summary="set the available drag-and-drop actions">
+	Sets the actions that the source side client supports for this
+	operation. This request may trigger wl_data_source.action and
+	wl_data_offer.action events if the compositor needs to change the
+	selected action.
+
+	The dnd_actions argument must contain only values expressed in the
+	wl_data_device_manager.dnd_actions enum, otherwise it will result
+	in a protocol error.
+
+	This request must be made once only, and can only be made on sources
+	used in drag-and-drop, so it must be performed before
+	wl_data_device.start_drag. Attempting to use the source other than
+	for drag-and-drop will raise a protocol error.
+      </description>
+      <arg name="dnd_actions" type="uint" summary="actions supported by the data source"
+	   enum="wl_data_device_manager.dnd_action"/>
+    </request>
+
+    <event name="dnd_drop_performed" since="3">
+      <description summary="the drag-and-drop operation physically finished">
+	The user performed the drop action. This event does not indicate
+	acceptance, wl_data_source.cancelled may still be emitted afterwards
+	if the drop destination does not accept any mime type.
+
+	However, this event might however not be received if the compositor
+	cancelled the drag-and-drop operation before this event could happen.
+
+	Note that the data_source may still be used in the future and should
+	not be destroyed here.
+      </description>
+    </event>
+
+    <event name="dnd_finished" since="3">
+      <description summary="the drag-and-drop operation concluded">
+	The drop destination finished interoperating with this data
+	source, so the client is now free to destroy this data source and
+	free all associated data.
+
+	If the action used to perform the operation was "move", the
+	source can now delete the transferred data.
+      </description>
+    </event>
+
+    <event name="action" since="3">
+      <description summary="notify the selected action">
+	This event indicates the action selected by the compositor after
+	matching the source/destination side actions. Only one action (or
+	none) will be offered here.
+
+	This event can be emitted multiple times during the drag-and-drop
+	operation, mainly in response to destination side changes through
+	wl_data_offer.set_actions, and as the data device enters/leaves
+	surfaces.
+
+	It is only possible to receive this event after
+	wl_data_source.dnd_drop_performed if the drag-and-drop operation
+	ended in an "ask" action, in which case the final wl_data_source.action
+	event will happen immediately before wl_data_source.dnd_finished.
+
+	Compositors may also change the selected action on the fly, mainly
+	in response to keyboard modifier changes during the drag-and-drop
+	operation.
+
+	The most recent action received is always the valid one. The chosen
+	action may change alongside negotiation (e.g. an "ask" action can turn
+	into a "move" operation), so the effects of the final action must
+	always be applied in wl_data_offer.dnd_finished.
+
+	Clients can trigger cursor surface changes from this point, so
+	they reflect the current action.
+      </description>
+      <arg name="dnd_action" type="uint" summary="action selected by the compositor"
+	   enum="wl_data_device_manager.dnd_action"/>
+    </event>
   </interface>
 
-  <interface name="wl_data_device" version="1">
+  <interface name="wl_data_device" version="3">
     <description summary="data transfer device">
       There is one wl_data_device per seat which can be obtained
       from the global wl_data_device_manager singleton.
@@ -525,6 +764,12 @@
       A wl_data_device provides access to inter-client data transfer
       mechanisms such as copy-and-paste and drag-and-drop.
     </description>
+
+    <enum name="error">
+      <entry name="role" value="0" summary="given wl_surface has another role"/>
+      <entry name="used_source" value="1" summary="source has already been used"/>
+    </enum>
+
     <request name="start_drag">
       <description summary="start drag-and-drop operation">
 	This request asks the compositor to start a drag-and-drop
@@ -534,7 +779,8 @@
 	for the eventual data transfer. If source is NULL, enter, leave
 	and motion events are sent only to the client that initiated the
 	drag and the client is expected to handle the data passing
-	internally.
+	internally. If source is destroyed, the drag-and-drop session will be
+	cancelled.
 
 	The origin surface is the surface where the drag originates and
 	the client must have an active implicit grab that matches the
@@ -543,20 +789,23 @@
 	The icon surface is an optional (can be NULL) surface that
 	provides an icon to be moved around with the cursor.  Initially,
 	the top-left corner of the icon surface is placed at the cursor
-	hotspot, but subsequent wl_surface.attach request can move the
+	hotspot, but subsequent wl_surface.offset requests can move the
 	relative position. Attach requests must be confirmed with
-	wl_surface.commit as usual.
+	wl_surface.commit as usual. The icon surface is given the role of
+	a drag-and-drop icon. If the icon surface already has another role,
+	it raises a protocol error.
 
-	The current and pending input regions of the icon wl_surface are
-	cleared, and wl_surface.set_input_region is ignored until the
-	wl_surface is no longer used as the icon surface. When the use
-	as an icon ends, the current and pending input regions become
-	undefined, and the wl_surface is unmapped.
+	The input region is ignored for wl_surfaces with the role of a
+	drag-and-drop icon.
+
+	The given source may not be used in any further set_selection or
+	start_drag requests. Attempting to reuse a previously-used source
+	may send a used_source error.
       </description>
-      <arg name="source" type="object" interface="wl_data_source" allow-null="true"/>
-      <arg name="origin" type="object" interface="wl_surface"/>
-      <arg name="icon" type="object" interface="wl_surface" allow-null="true"/>
-      <arg name="serial" type="uint" summary="serial of the implicit grab on the origin"/>
+      <arg name="source" type="object" interface="wl_data_source" allow-null="true" summary="data source for the eventual transfer"/>
+      <arg name="origin" type="object" interface="wl_surface" summary="surface where the drag originates"/>
+      <arg name="icon" type="object" interface="wl_surface" allow-null="true" summary="drag-and-drop icon surface"/>
+      <arg name="serial" type="uint" summary="serial number of the implicit grab on the origin"/>
     </request>
 
     <request name="set_selection">
@@ -565,9 +814,13 @@
 	to the data from the source on behalf of the client.
 
 	To unset the selection, set the source to NULL.
+
+	The given source may not be used in any further set_selection or
+	start_drag requests. Attempting to reuse a previously-used source
+	may send a used_source error.
       </description>
-      <arg name="source" type="object" interface="wl_data_source" allow-null="true"/>
-      <arg name="serial" type="uint" summary="serial of the event that triggered this request"/>
+      <arg name="source" type="object" interface="wl_data_source" allow-null="true" summary="data source for the selection"/>
+      <arg name="serial" type="uint" summary="serial number of the event that triggered this request"/>
     </request>
 
     <event name="data_offer">
@@ -576,27 +829,26 @@
 	which will subsequently be used in either the
 	data_device.enter event (for drag-and-drop) or the
 	data_device.selection event (for selections).  Immediately
-	following the data_device_data_offer event, the new data_offer
+	following the data_device.data_offer event, the new data_offer
 	object will send out data_offer.offer events to describe the
 	mime types it offers.
       </description>
-
-      <arg name="id" type="new_id" interface="wl_data_offer"/>
+      <arg name="id" type="new_id" interface="wl_data_offer" summary="the new data_offer object"/>
     </event>
 
     <event name="enter">
       <description summary="initiate drag-and-drop session">
 	This event is sent when an active drag-and-drop pointer enters
 	a surface owned by the client.  The position of the pointer at
-	enter time is provided by the x and y arguments, in surface
-	local coordinates.
+	enter time is provided by the x and y arguments, in surface-local
+	coordinates.
       </description>
-
-      <arg name="serial" type="uint"/>
-      <arg name="surface" type="object" interface="wl_surface"/>
-      <arg name="x" type="fixed"/>
-      <arg name="y" type="fixed"/>
-      <arg name="id" type="object" interface="wl_data_offer" allow-null="true"/>
+      <arg name="serial" type="uint" summary="serial number of the enter event"/>
+      <arg name="surface" type="object" interface="wl_surface" summary="client surface entered"/>
+      <arg name="x" type="fixed" summary="surface-local x coordinate"/>
+      <arg name="y" type="fixed" summary="surface-local y coordinate"/>
+      <arg name="id" type="object" interface="wl_data_offer" allow-null="true"
+	   summary="source data_offer object"/>
     </event>
 
     <event name="leave">
@@ -611,18 +863,29 @@
       <description summary="drag-and-drop session motion">
 	This event is sent when the drag-and-drop pointer moves within
 	the currently focused surface. The new position of the pointer
-	is provided by the x and y arguments, in surface local
+	is provided by the x and y arguments, in surface-local
 	coordinates.
       </description>
       <arg name="time" type="uint" summary="timestamp with millisecond granularity"/>
-      <arg name="x" type="fixed"/>
-      <arg name="y" type="fixed"/>
+      <arg name="x" type="fixed" summary="surface-local x coordinate"/>
+      <arg name="y" type="fixed" summary="surface-local y coordinate"/>
     </event>
 
     <event name="drop">
-      <description summary="end drag-and-drag session successfully">
+      <description summary="end drag-and-drop session successfully">
 	The event is sent when a drag-and-drop operation is ended
 	because the implicit grab is removed.
+
+	The drag-and-drop destination is expected to honor the last action
+	received through wl_data_offer.action, if the resulting action is
+	"copy" or "move", the destination can still perform
+	wl_data_offer.receive requests, and is expected to end all
+	transfers with a wl_data_offer.finish request.
+
+	If the resulting action is "ask", the action will not be considered
+	final. The drag-and-drop destination is expected to perform one last
+	wl_data_offer.set_actions request, or wl_data_offer.destroy in order
+	to cancel the operation.
       </description>
     </event>
 
@@ -636,35 +899,86 @@
 	immediately before receiving keyboard focus and when a new
 	selection is set while the client has keyboard focus.  The
 	data_offer is valid until a new data_offer or NULL is received
-	or until the client loses keyboard focus.
+	or until the client loses keyboard focus.  Switching surface with
+	keyboard focus within the same client doesn't mean a new selection
+	will be sent.  The client must destroy the previous selection
+	data_offer, if any, upon receiving this event.
       </description>
-      <arg name="id" type="object" interface="wl_data_offer" allow-null="true"/>
+      <arg name="id" type="object" interface="wl_data_offer" allow-null="true"
+	   summary="selection data_offer object"/>
     </event>
+
+    <!-- Version 2 additions -->
+
+    <request name="release" type="destructor" since="2">
+      <description summary="destroy data device">
+	This request destroys the data device.
+      </description>
+    </request>
   </interface>
 
-  <interface name="wl_data_device_manager" version="1">
+  <interface name="wl_data_device_manager" version="3">
     <description summary="data transfer interface">
       The wl_data_device_manager is a singleton global object that
       provides access to inter-client data transfer mechanisms such as
       copy-and-paste and drag-and-drop.  These mechanisms are tied to
       a wl_seat and this interface lets a client get a wl_data_device
       corresponding to a wl_seat.
+
+      Depending on the version bound, the objects created from the bound
+      wl_data_device_manager object will have different requirements for
+      functioning properly. See wl_data_source.set_actions,
+      wl_data_offer.accept and wl_data_offer.finish for details.
     </description>
 
     <request name="create_data_source">
       <description summary="create a new data source">
-        Create a new data source.
+	Create a new data source.
       </description>
-      <arg name="id" type="new_id" interface="wl_data_source"/>
+      <arg name="id" type="new_id" interface="wl_data_source" summary="data source to create"/>
     </request>
 
     <request name="get_data_device">
       <description summary="create a new data device">
-        Create a new data device for a given seat.
+	Create a new data device for a given seat.
       </description>
-      <arg name="id" type="new_id" interface="wl_data_device"/>
-      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="id" type="new_id" interface="wl_data_device" summary="data device to create"/>
+      <arg name="seat" type="object" interface="wl_seat" summary="seat associated with the data device"/>
     </request>
+
+    <!-- Version 3 additions -->
+
+    <enum name="dnd_action" bitfield="true" since="3">
+      <description summary="drag and drop actions">
+	This is a bitmask of the available/preferred actions in a
+	drag-and-drop operation.
+
+	In the compositor, the selected action is a result of matching the
+	actions offered by the source and destination sides.  "action" events
+	with a "none" action will be sent to both source and destination if
+	there is no match. All further checks will effectively happen on
+	(source actions ∩ destination actions).
+
+	In addition, compositors may also pick different actions in
+	reaction to key modifiers being pressed. One common design that
+	is used in major toolkits (and the behavior recommended for
+	compositors) is:
+
+	- If no modifiers are pressed, the first match (in bit order)
+	  will be used.
+	- Pressing Shift selects "move", if enabled in the mask.
+	- Pressing Control selects "copy", if enabled in the mask.
+
+	Behavior beyond that is considered implementation-dependent.
+	Compositors may for example bind other modifiers (like Alt/Meta)
+	or drags initiated with other buttons than BTN_LEFT to specific
+	actions (e.g. "ask").
+      </description>
+      <entry name="none" value="0" summary="no action"/>
+      <entry name="copy" value="1" summary="copy action"/>
+      <entry name="move" value="2" summary="move action"/>
+      <entry name="ask" value="4" summary="ask action"/>
+    </enum>
   </interface>
 
   <interface name="wl_shell" version="1">

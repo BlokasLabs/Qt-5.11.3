@@ -158,6 +158,10 @@ void QMainWindowPrivate::init()
     const int metric = q->style()->pixelMetric(QStyle::PM_ToolBarIconSize, 0, q);
     iconSize = QSize(metric, metric);
     q->setAttribute(Qt::WA_Hover);
+#if QT_CONFIG(draganddrop)
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        q->setAcceptDrops(true);
+#endif
 }
 
 /*
@@ -1334,6 +1338,24 @@ bool QMainWindow::event(QEvent *event)
             return true;
 #endif // QT_CONFIG(statustip)
 
+#if QT_CONFIG(draganddrop)
+        case QEvent::DragEnter:
+        case QEvent::DragMove:
+        case QEvent::Drop: {
+            auto drop = static_cast<QDropEvent *>(event);
+            if (!d->layout->draggingWidget || drop->source() != d->layout->draggingWidget->widget())
+                break;
+            d->layout->hover(d->layout->draggingWidget, mapToGlobal(drop->pos()));
+            drop->setDropAction(Qt::MoveAction);
+            drop->accept();
+            return true;
+        }
+        case QEvent::DragLeave:
+            if (!d->layout->draggingWidget)
+                break;
+            d->layout->hover(d->layout->draggingWidget, mapToGlobal(QPoint(-1, -1)));
+            return true;
+#endif
         case QEvent::StyleChange:
 #if QT_CONFIG(dockwidget)
             d->layout->layoutState.dockAreaLayout.styleChangedEvent();

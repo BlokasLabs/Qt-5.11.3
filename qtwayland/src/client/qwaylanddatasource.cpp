@@ -80,6 +80,23 @@ void QWaylandDataSource::data_source_cancelled()
     Q_EMIT cancelled();
 }
 
+void QWaylandDataSource::data_source_dnd_drop_performed()
+{
+    Q_EMIT dropped();
+}
+
+void QWaylandDataSource::data_source_dnd_finished()
+{
+    Q_EMIT finished();
+}
+
+void QWaylandDataSource::data_source_action(uint32_t action)
+{
+    Q_EMIT actionChanged(action == WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE ? Qt::MoveAction
+                        : action == WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY ? Qt::CopyAction
+                        : Qt::IgnoreAction);
+}
+
 void QWaylandDataSource::data_source_send(const QString &mime_type, int32_t fd)
 {
     QByteArray content = QWaylandMimeHelper::getByteArray(m_mime_data, mime_type);

@@ -70,6 +70,14 @@ namespace QtWaylandClient {
 class QWaylandWindow;
 class QWaylandInputDevice;
 
+// Owned by the data device, so closing a dragged window cannot destroy the
+// protocol object before the compositor ends the drag.
+class QWaylandToplevelDrag
+{
+public:
+    virtual ~QWaylandToplevelDrag() {}
+};
+
 class Q_WAYLAND_CLIENT_EXPORT QWaylandShellSurface : public QObject
 {
     Q_OBJECT
@@ -105,6 +113,10 @@ protected:
     virtual void setFullscreen() {}
     virtual void setNormal() {}
     virtual void setMinimized() {}
+
+public:
+    virtual QWaylandToplevelDrag *startToplevelDrag(struct ::wl_data_source *, const QPoint &) { return nullptr; }
+    virtual bool supportsToplevelDrag() const { return false; }
 
 private:
     QWaylandWindow *m_window = nullptr;

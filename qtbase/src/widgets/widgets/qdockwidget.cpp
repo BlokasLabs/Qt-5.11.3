@@ -47,6 +47,7 @@
 #include <qfontmetrics.h>
 #include <qproxystyle.h>
 #include <qwindow.h>
+#include <qpa/qplatformwindow.h>
 #include <qscreen.h>
 #include <qmainwindow.h>
 #include <qstylepainter.h>
@@ -279,7 +280,11 @@ bool QDockWidgetLayout::wmSupportsNativeWindowDeco()
     return false;
 #else
     static const bool xcb = !QGuiApplication::platformName().compare(QLatin1String("xcb"), Qt::CaseInsensitive);
-    return !xcb;
+    // Wayland decoration drags are handled by the compositor, so they do not
+    // deliver the non-client mouse/move events needed for docking. Keep Qt's
+    // title bar (including its re-dock button) for floating docks instead.
+    static const bool wayland = QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive);
+    return !(xcb || wayland);
 #endif
 }
 
@@ -806,6 +811,9 @@ void QDockWidgetPrivate::startDrag(bool group)
     QMainWindowLayout *layout = qt_mainwindow_layout_from_dock(q);
     Q_ASSERT(layout != 0);
 
+#if QT_CONFIG(draganddrop)
+    const bool wasFloating = q->isFloating();
+#endif
     state->widgetItem = layout->unplug(q, group);
     if (state->widgetItem == 0) {
         /* I have a QMainWindow parent, but I was never inserted with
@@ -824,6 +832,22 @@ void QDockWidgetPrivate::startDrag(bool group)
         layout->restore();
 
     state->dragging = true;
+
+#if QT_CONFIG(draganddrop)
+    if (QMainWindowLayout::needsPlatformDrag()) {
+        QPointer<QDockWidget> guard(q);
+        const auto result = layout->performPlatformWidgetDrag(state->widgetItem, state->pressPos, !state->ctrlDrag);
+        if (!guard)
+            return;
+        if (result == Qt::IgnoreAction && !wasFloating) {
+            layout->revert(state->widgetItem);
+            delete state;
+            state = nullptr;
+        } else {
+            endDrag(result == Qt::IgnoreAction);
+        }
+    }
+#endif
 }
 
 /*! \internal
@@ -965,6 +989,25 @@ bool QDockWidgetPrivate::mouseMoveEvent(QMouseEvent *event)
             && mwlayout->pluggingWidget == 0
             && (event->pos() - state->pressPos).manhattanLength()
                 > QApplication::startDragDistance()) {
+#if QT_CONFIG(draganddrop)
+            if (QMainWindowLayout::needsPlatformDrag()) {
+                startDrag(false);
+                return true;
+            }
+#endif
+            // A Wayland toplevel cannot be positioned with QWidget::move().
+            // Keep the docked drag path, but hand an already floating window
+            // to the compositor before unplugging it or grabbing the mouse.
+            if (q->isFloating()
+                    && QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive)) {
+                QWindow *window = q->windowHandle();
+                if (window && window->handle()
+                        && window->handle()->startSystemMove(state->pressPos)) {
+                    delete state;
+                    state = nullptr;
+                }
+                return true;
+            }
             startDrag();
 #if 0 // Used to be included in Qt4 for Q_WS_WIN
             grabMouseWhileInWindow();
@@ -1107,6 +1150,11 @@ void QDockWidgetPrivate::moveEvent(QMoveEvent *event)
 void QDockWidgetPrivate::unplug(const QRect &rect)
 {
     Q_Q(QDockWidget);
+#if QT_CONFIG(draganddrop)
+    // Keep the wl_surface that owns the pointer grab alive during re-docking.
+    if (q->isFloating() && QMainWindowLayout::needsPlatformDrag())
+        return;
+#endif
     QRect r = rect;
     r.moveTopLeft(q->mapToGlobal(QPoint(0, 0)));
     QDockWidgetLayout *dwLayout = qobject_cast<QDockWidgetLayout*>(layout);
@@ -1152,7 +1200,8 @@ void QDockWidgetPrivate::setWindowState(bool floating, bool unplug, const QRect 
         flags |= Qt::FramelessWindowHint;
     }
 
-    if (unplug)
+    if (unplug
+            && !QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
         flags |= Qt::X11BypassWindowManagerHint;
 
     q->setWindowFlags(flags);

@@ -239,6 +239,13 @@ void QWaylandXdgSurfaceStable::setType(Qt::WindowType type, QWaylandWindow *tran
             if (parentXdgSurface && parentXdgSurface->m_toplevel)
                 m_toplevel->set_parent(parentXdgSurface->m_toplevel->object());
         }
+        if (type == Qt::Tool && transientParent && m_shell->m_plasmaShell) {
+            m_plasmaSurface.reset(new QtWayland::org_kde_plasma_surface(
+                m_shell->m_plasmaShell->get_surface(m_window->object())));
+            m_plasmaSurface->set_skip_taskbar(1);
+            if (wl_proxy_get_version(reinterpret_cast<wl_proxy *>(m_plasmaSurface->object())) >= 5)
+                m_plasmaSurface->set_skip_switcher(1);
+        }
     }
     // xdg-shell requires an initial bufferless commit to trigger configure.
     m_window->wl_surface::commit();
@@ -246,6 +253,8 @@ void QWaylandXdgSurfaceStable::setType(Qt::WindowType type, QWaylandWindow *tran
 
 QWaylandXdgSurfaceStable::~QWaylandXdgSurfaceStable()
 {
+    if (m_plasmaSurface)
+        m_plasmaSurface->destroy();
     if (m_toplevel) {
         delete m_toplevel;
         m_toplevel = nullptr;
@@ -276,6 +285,26 @@ bool QWaylandXdgSurfaceStable::move(QWaylandInputDevice *inputDevice)
         return true;
     }
     return false;
+}
+
+QWaylandToplevelDrag *QWaylandXdgSurfaceStable::startToplevelDrag(struct ::wl_data_source *source, const QPoint &offset)
+{
+    if (!m_toplevel || !m_shell->m_toplevelDragManager)
+        return nullptr;
+    class ToplevelDrag : public QWaylandToplevelDrag, public QtWayland::xdg_toplevel_drag_v1 {
+    public:
+        explicit ToplevelDrag(struct ::xdg_toplevel_drag_v1 *object)
+            : QtWayland::xdg_toplevel_drag_v1(object) {}
+        ~ToplevelDrag() override { destroy(); }
+    };
+    auto drag = new ToplevelDrag(m_shell->m_toplevelDragManager->get_xdg_toplevel_drag(source));
+    drag->attach(m_toplevel->object(), offset.x(), offset.y());
+    return drag;
+}
+
+bool QWaylandXdgSurfaceStable::supportsToplevelDrag() const
+{
+    return !m_shell->m_toplevelDragManager.isNull();
 }
 
 void QWaylandXdgSurfaceStable::setTitle(const QString &title)
@@ -427,6 +456,10 @@ QWaylandXdgShellStable::QWaylandXdgShellStable(QWaylandDisplay *display, uint32_
 QWaylandXdgShellStable::~QWaylandXdgShellStable()
 {
     m_display->removeListener(&QWaylandXdgShellStable::handleRegistryGlobal, this);
+    if (m_toplevelDragManager)
+        m_toplevelDragManager->destroy();
+    if (m_plasmaShell)
+        wl_proxy_destroy(reinterpret_cast<wl_proxy *>(m_plasmaShell->object()));
     destroy();
 }
 
@@ -448,6 +481,10 @@ void QWaylandXdgShellStable::handleRegistryGlobal(void *data, wl_registry *regis
         xdgShell->m_xdgDecorationManager.reset(new QWaylandXdgDecorationManagerV1(registry, id, version));
     else if (interface == QLatin1String(QWaylandXdgToplevelIconManagerV1::interface()->name))
         xdgShell->m_iconManager.reset(new QWaylandXdgToplevelIconManagerV1(xdgShell->m_display, id, version));
+    else if (interface == QLatin1String("xdg_toplevel_drag_manager_v1"))
+        xdgShell->m_toplevelDragManager.reset(new QtWayland::xdg_toplevel_drag_manager_v1(registry, id, 1));
+    else if (interface == QLatin1String("org_kde_plasma_shell") && version >= 2)
+        xdgShell->m_plasmaShell.reset(new QtWayland::org_kde_plasma_shell(registry, id, qMin(version, 5u)));
 }
 
 }
