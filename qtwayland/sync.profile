@@ -19,6 +19,10 @@
 );
 %inject_headers = (
     "$basedir/src/client" => [
+        "^qwayland-cursor-shape-v1.h",
+        "^wayland-cursor-shape-v1-client-protocol.h",
+        "^qwayland-tablet-unstable-v2.h",
+        "^wayland-tablet-unstable-v2-client-protocol.h",
         "^qwayland-hardware-integration.h",
         "^qwayland-qt-windowmanager.h",
         "^qwayland-qtkey-extension.h" ,

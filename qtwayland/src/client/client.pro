@@ -23,6 +23,8 @@ QMAKE_USE += wayland-client
 INCLUDEPATH += $$PWD/../shared
 
 WAYLANDCLIENTSOURCES += \
+            ../3rdparty/protocol/cursor-shape-v1.xml \
+            ../3rdparty/protocol/tablet-unstable-v2.xml \
             ../extensions/surface-extension.xml \
             ../extensions/touch-extension.xml \
             ../extensions/qtkey-extension.xml \

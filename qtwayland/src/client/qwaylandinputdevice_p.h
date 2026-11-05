@@ -82,6 +82,8 @@ struct xkb_compose_state;
 struct xkb_compose_table;
 #endif
 
+struct wp_cursor_shape_device_v1;
+
 QT_BEGIN_NAMESPACE
 
 namespace QtWaylandClient {
@@ -272,6 +274,8 @@ public:
     QPointF mGlobalPos;
     Qt::MouseButtons mButtons = Qt::NoButton;
 #if QT_CONFIG(cursor)
+    wp_cursor_shape_device_v1 *mCursorShapeDevice = nullptr;
+    bool mUsingCursorShape = false;
     wl_buffer *mCursorBuffer = nullptr;
     Qt::CursorShape mCursorShape = Qt::BitmapCursor;
 #endif

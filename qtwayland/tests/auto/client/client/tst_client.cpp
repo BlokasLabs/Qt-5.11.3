@@ -40,6 +40,7 @@
 
 #include <QtTest/QtTest>
 #include <QtWaylandClient/private/qwaylandintegration_p.h>
+#include <QtWaylandClient/private/qwaylanddnd_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 
 static const QSize screenSize(1600, 1200);
@@ -177,6 +178,7 @@ private slots:
     void backingStore();
     void touchDrag();
     void mouseDrag();
+    void mouseDragReleaseRestoresCursor();
     void dontCrashOnMultipleCommits();
     void hiddenTransientParent();
     void hiddenPopupParent();
@@ -419,6 +421,7 @@ public:
     ~DndWindow() override{}
     QPoint frameOffset() const { return QPoint(frameMargins().left(), frameMargins().top()); }
     bool dragStarted = false;
+    bool dragFinished = false;
 
 protected:
     void mousePressEvent(QMouseEvent *event) override
@@ -435,6 +438,7 @@ protected:
         drag->setMimeData(mimeData);
         drag->setPixmap(m_dragIcon);
         drag->exec(Qt::CopyAction | Qt::MoveAction, Qt::CopyAction);
+        dragFinished = true;
     }
 private:
     QPixmap m_dragIcon;
@@ -486,6 +490,36 @@ void tst_WaylandClient::mouseDrag()
     compositor->sendDataDeviceDrop(surface);
     compositor->sendDataDeviceLeave(surface);
     QTRY_VERIFY(window.dragStarted);
+}
+
+void tst_WaylandClient::mouseDragReleaseRestoresCursor()
+{
+    DndWindow window;
+    window.show();
+    QSharedPointer<MockSurface> surface;
+    QTRY_VERIFY(surface = compositor->surface());
+    compositor->sendShellSurfaceConfigure(surface);
+    compositor->setKeyboardFocus(surface);
+    QTRY_COMPARE(QGuiApplication::focusWindow(), &window);
+
+    // Preserve a caller's override while removing only the drag's override.
+    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+    QTimer::singleShot(100, &window, [&window] {
+        auto drag = static_cast<QtWaylandClient::QWaylandDrag *>(
+                QGuiApplicationPrivate::platformIntegration()->drag());
+        QTRY_VERIFY(drag->currentDrag());
+        drag->setResponse(QPlatformDragQtResponse(true, Qt::CopyAction, QRect()));
+        // Simulate release before the compositor's data-source completion.
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(10, 10),
+                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(&window, &release);
+    });
+    compositor->sendMousePress(surface, window.frameOffset() + QPoint(10, 10));
+    QTRY_VERIFY(window.dragFinished);
+    QVERIFY(QGuiApplication::overrideCursor());
+    QCOMPARE(QGuiApplication::overrideCursor()->shape(), Qt::WaitCursor);
+    QGuiApplication::restoreOverrideCursor();
+    QVERIFY(!QGuiApplication::overrideCursor());
 }
 
 void tst_WaylandClient::dontCrashOnMultipleCommits()
@@ -596,7 +630,7 @@ void tst_WaylandClient::longWindowTitle()
 
 int main(int argc, char **argv)
 {
-    setenv("XDG_RUNTIME_DIR", ".", 1);
+    qputenv("XDG_RUNTIME_DIR", QFile::encodeName(QDir::currentPath()));
     setenv("QT_QPA_PLATFORM", "wayland", 1); // force QGuiApplication to use wayland plugin
 
     MockCompositor compositor;

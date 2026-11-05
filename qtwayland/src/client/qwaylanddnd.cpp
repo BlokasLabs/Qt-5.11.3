@@ -91,6 +91,10 @@ void QWaylandDrag::drop(const QPoint &globalPos)
 
 void QWaylandDrag::endDrag()
 {
+    // A pointer release may end QBasicDrag's loop before data-source completion.
+    // Its release path calls our no-op drop(), so retire both the cursor and
+    // any unfinished data source. cancel() is safe after compositor completion.
+    cancel();
     m_display->currentInputDevice()->handleEndDrag();
 }
 

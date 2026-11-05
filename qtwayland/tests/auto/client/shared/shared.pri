@@ -7,8 +7,10 @@ QMAKE_USE += wayland-client wayland-server
 CONFIG += wayland-scanner
 WAYLANDSERVERSOURCES += \
     ../../../../src/3rdparty/protocol/ivi-application.xml \
-    ../../../../src/3rdparty/protocol/wayland.xml \
     ../../../../src/3rdparty/protocol/xdg-shell-unstable-v6.xml
+
+# Use libwayland's core interfaces, including the version used by its shm server.
+WAYLANDSERVERSOURCES_SYSTEM += ../../../../src/3rdparty/protocol/wayland.xml
 
 INCLUDEPATH += ../shared
 

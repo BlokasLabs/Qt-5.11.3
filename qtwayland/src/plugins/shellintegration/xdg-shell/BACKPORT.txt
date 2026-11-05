@@ -1,6 +1,29 @@
 Stable xdg-shell client backport
 ===============================
 
+Cursor restoration and desktop theme:
+- The optional cursor-shape-v1 protocol (bound at version 1) lets the compositor
+  supply standard cursors, including its theme, size and output scaling. The
+  existing Xcursor lookup remains the fallback for older compositors and
+  shapes without a protocol equivalent. Custom bitmap and blank cursors keep
+  using wl_pointer.set_cursor.
+- cursor-shape-v1.xml and its tablet-unstable-v2.xml interface dependency come
+  from wayland-protocols. Tablet input is not enabled by this change.
+- Pointer entry records the new serial before applying the cursor, bypassing
+  QWindow's unchanged-shape shortcut. Window-specific cursor updates only
+  affect the focused window; application overrides also work during DnD.
+- Every drag exit retires its override cursor and unfinished source, including
+  a pointer release before data-source completion. The auto-test
+  tst_client mouseDragReleaseRestoresCursor covers that ordering and preserves
+  an application override beneath the drag cursor.
+
+Manual cursor checks: under KWin, undock, release, re-dock, and cancel with
+Escape; then hover plain content, links, text, and resize borders. Repeat at
+100% and 200% scaling and test a normal copy drag. WAYLAND_DEBUG=1 should show
+set_shape(default) using the latest pointer-enter serial on plain content,
+not a lingering copy cursor. Test custom bitmap and blank cursors too. Without
+the optional protocol, ordinary Xcursor-backed cursor updates must still work.
+
 Dock dragging and tool-window grouping:
 - QDockWidget uses a platform drag on compositors advertising
   xdg-toplevel-drag-v1. The compositor moves the actual floating surface while

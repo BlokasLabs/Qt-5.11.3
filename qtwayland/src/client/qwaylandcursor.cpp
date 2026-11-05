@@ -40,21 +40,25 @@
 #include "qwaylandcursor_p.h"
 
 #include "qwaylanddisplay_p.h"
+#include "qwaylandwindow_p.h"
 #include "qwaylandinputdevice_p.h"
 #include "qwaylandscreen_p.h"
 #include "qwaylandshmbackingstore_p.h"
 
 #include <QtGui/QImageReader>
+#include <QtGui/QGuiApplication>
+#include <QtGui/QScreen>
 #include <QDebug>
 
 #include <wayland-cursor.h>
+#include "wayland-cursor-shape-v1-client-protocol.h"
 
 QT_BEGIN_NAMESPACE
 
 namespace QtWaylandClient {
 
 QWaylandCursor::QWaylandCursor(QWaylandScreen *screen)
-    : mDisplay(screen->display())
+    : mDisplay(screen->display()), mScreen(screen)
 {
     //TODO: Make wl_cursor_theme_load arguments configurable here
     QByteArray cursorTheme = qgetenv("XCURSOR_THEME");
@@ -122,24 +126,55 @@ QSharedPointer<QWaylandBuffer> QWaylandCursor::cursorBitmapImage(const QCursor *
     return buffer;
 }
 
+uint32_t QWaylandCursor::protocolShape(Qt::CursorShape shape)
+{
+    switch (int(shape)) {
+    case ArrowCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+    case CrossCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
+    case WaitCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_WAIT;
+    case IBeamCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_TEXT;
+    case SizeVerCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NS_RESIZE;
+    case SizeHorCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_EW_RESIZE;
+    case SizeBDiagCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NESW_RESIZE;
+    case SizeFDiagCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NWSE_RESIZE;
+    case SizeAllCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_ALL_SCROLL;
+    case SplitVCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_ROW_RESIZE;
+    case SplitHCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_COL_RESIZE;
+    case PointingHandCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER;
+    case ForbiddenCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NOT_ALLOWED;
+    case WhatsThisCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_HELP;
+    case BusyCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_PROGRESS;
+    case OpenHandCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRAB;
+    case ClosedHandCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING;
+    case DragCopyCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_COPY;
+    case DragMoveCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_MOVE;
+    case DragLinkCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_ALIAS;
+    case ResizeNorthCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_N_RESIZE;
+    case ResizeSouthCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_S_RESIZE;
+    case ResizeEastCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_E_RESIZE;
+    case ResizeWestCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_W_RESIZE;
+    case ResizeNorthWestCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NW_RESIZE;
+    case ResizeSouthEastCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_SE_RESIZE;
+    case ResizeNorthEastCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NE_RESIZE;
+    case ResizeSouthWestCursor: return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_SW_RESIZE;
+    default: return 0; // Blank, bitmap and shapes without a protocol equivalent.
+    }
+}
+
 void QWaylandCursor::changeCursor(QCursor *cursor, QWindow *window)
 {
-    Q_UNUSED(window)
-
-    const Qt::CursorShape newShape = cursor ? cursor->shape() : Qt::ArrowCursor;
-
-    if (newShape == Qt::BitmapCursor) {
-        mDisplay->setCursor(cursorBitmapImage(cursor), cursor->hotSpot());
-        return;
+    const QCursor arrow(Qt::ArrowCursor);
+    QWaylandScreen *screen = window
+            ? static_cast<QWaylandScreen *>(window->screen()->handle()) : mScreen;
+    for (QWaylandInputDevice *device : mDisplay->inputDevices()) {
+        // Restoring an override visits every window. Only the focused window
+        // may choose this seat's cursor; another window may still have a hand
+        // or drag cursor set on it.
+        if (window && !QGuiApplication::overrideCursor()
+                && (!device->pointerFocus() || device->pointerFocus()->window() != window))
+            continue;
+        device->setCursor(cursor ? *cursor : arrow, screen);
     }
-
-    struct wl_cursor_image *image = cursorImage(newShape);
-    if (!image) {
-        return;
-    }
-
-    struct wl_buffer *buffer = wl_cursor_image_get_buffer(image);
-    mDisplay->setCursor(buffer, image);
 }
 
 void QWaylandCursor::pointerEvent(const QMouseEvent &event)

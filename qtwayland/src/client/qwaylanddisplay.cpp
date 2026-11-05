@@ -38,6 +38,7 @@
 ****************************************************************************/
 
 #include "qwaylanddisplay_p.h"
+#include "wayland-cursor-shape-v1-client-protocol.h"
 
 #include "qwaylandintegration_p.h"
 #include "qwaylandwindow_p.h"
@@ -155,6 +156,10 @@ QWaylandDisplay::~QWaylandDisplay(void)
 #if QT_CONFIG(wayland_datadevice)
     delete mDndSelectionHandler.take();
 #endif
+#if QT_CONFIG(cursor)
+    if (mCursorShapeManager)
+        wp_cursor_shape_manager_v1_destroy(mCursorShapeManager);
+#endif
     if (mDisplay)
         wl_display_disconnect(mDisplay);
 }
@@ -245,6 +250,11 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
         mCompositor.init(registry, id, mCompositorVersion);
     } else if (interface == QStringLiteral("wl_shm")) {
         mShm.reset(new QWaylandShm(this, version, id));
+#if QT_CONFIG(cursor)
+    } else if (interface == QStringLiteral("wp_cursor_shape_manager_v1")) {
+        mCursorShapeManager = static_cast<wp_cursor_shape_manager_v1 *>(
+                wl_registry_bind(object(), id, &wp_cursor_shape_manager_v1_interface, 1));
+#endif
     } else if (interface == QStringLiteral("wl_seat")) {
         QWaylandInputDevice *inputDevice = mWaylandIntegration->createInputDevice(this, version, id);
         mInputDevices.append(inputDevice);

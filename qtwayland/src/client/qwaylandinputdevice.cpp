@@ -38,6 +38,7 @@
 ****************************************************************************/
 
 #include "qwaylandinputdevice_p.h"
+#include "wayland-cursor-shape-v1-client-protocol.h"
 
 #include "qwaylandintegration_p.h"
 #include "qwaylandwindow_p.h"
@@ -56,6 +57,7 @@
 
 #include <QtGui/private/qpixmap_raster_p.h>
 #include <QtGui/private/qguiapplication_p.h>
+#include <QtGui/private/qwindow_p.h>
 #include <qpa/qplatformwindow.h>
 #include <qpa/qplatforminputcontext.h>
 #include <QDebug>
@@ -180,6 +182,10 @@ QWaylandInputDevice::Pointer::Pointer(QWaylandInputDevice *p)
 
 QWaylandInputDevice::Pointer::~Pointer()
 {
+#if QT_CONFIG(cursor)
+    if (mCursorShapeDevice)
+        wp_cursor_shape_device_v1_destroy(mCursorShapeDevice);
+#endif
     if (mParent->mVersion >= 3)
         wl_pointer_release(object());
     else
@@ -365,6 +371,25 @@ uint32_t QWaylandInputDevice::cursorSerial() const
 
 void QWaylandInputDevice::setCursor(Qt::CursorShape newShape, QWaylandScreen *screen)
 {
+    if (!mPointer)
+        return;
+    if (newShape == Qt::BlankCursor) {
+        setCursor(nullptr, nullptr);
+        return;
+    }
+    const uint32_t shape = QWaylandCursor::protocolShape(newShape);
+    if (shape && mQDisplay->cursorShapeManager()) {
+        if (!mPointer->mCursorShapeDevice)
+            mPointer->mCursorShapeDevice = wp_cursor_shape_manager_v1_get_pointer(
+                    mQDisplay->cursorShapeManager(), mPointer->object());
+        wp_cursor_shape_device_v1_set_shape(mPointer->mCursorShapeDevice,
+                                          mPointer->mEnterSerial, shape);
+        mPointer->mUsingCursorShape = true;
+        mPointer->mCursorSerial = mPointer->mEnterSerial;
+        mPointer->mCursorShape = newShape;
+        mPixmapCursor.clear();
+        return;
+    }
     struct wl_cursor_image *image = screen->waylandCursor()->cursorImage(newShape);
     if (!image) {
         return;
@@ -376,7 +401,9 @@ void QWaylandInputDevice::setCursor(Qt::CursorShape newShape, QWaylandScreen *sc
 
 void QWaylandInputDevice::setCursor(const QCursor &cursor, QWaylandScreen *screen)
 {
-    if (mPointer->mCursorSerial >= mPointer->mEnterSerial && (cursor.shape() != Qt::BitmapCursor && cursor.shape() == mPointer->mCursorShape))
+    if (!mPointer)
+        return;
+    if (mPointer->mCursorSerial == mPointer->mEnterSerial && (cursor.shape() != Qt::BitmapCursor && cursor.shape() == mPointer->mCursorShape))
         return;
 
     mPointer->mCursorShape = cursor.shape();
@@ -397,11 +424,13 @@ void QWaylandInputDevice::setCursor(struct wl_buffer *buffer, struct wl_cursor_i
 void QWaylandInputDevice::setCursor(struct wl_buffer *buffer, const QPoint &hotSpot, const QSize &size)
 {
     if (mCaps & WL_SEAT_CAPABILITY_POINTER) {
-        bool force = mPointer->mEnterSerial > mPointer->mCursorSerial;
+        bool force = mPointer->mEnterSerial != mPointer->mCursorSerial || mPointer->mUsingCursorShape;
 
         if (!force && mPointer->mCursorBuffer == buffer)
             return;
 
+        mPointer->mUsingCursorShape = false;
+        mPointer->mCursorShape = Qt::BitmapCursor;
         mPixmapCursor.clear();
         mPointer->mCursorSerial = mPointer->mEnterSerial;
 
@@ -444,16 +473,16 @@ void QWaylandInputDevice::Pointer::pointer_enter(uint32_t serial, struct wl_surf
         return;
 
     QWaylandWindow *window = QWaylandWindow::fromWlSurface(surface);
-#if QT_CONFIG(cursor)
-    window->window()->setCursor(window->window()->cursor());
-#endif
-
     mFocus = window;
     mSurfacePos = QPointF(wl_fixed_to_double(sx), wl_fixed_to_double(sy));
     mGlobalPos = window->window()->mapToGlobal(mSurfacePos.toPoint());
 
     mParent->mSerial = serial;
     mEnterSerial = serial;
+#if QT_CONFIG(cursor)
+    // Cursor requests must use this enter's serial, including after a native drag.
+    QWindowPrivate::get(window->window())->applyCursor();
+#endif
 
     QWaylandWindow *grab = QWaylandWindow::mouseGrab();
     if (!grab) {

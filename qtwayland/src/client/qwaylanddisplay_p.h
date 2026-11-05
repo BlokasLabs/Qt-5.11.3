@@ -67,6 +67,8 @@
 
 struct wl_cursor_image;
 
+struct wp_cursor_shape_manager_v1;
+
 QT_BEGIN_NAMESPACE
 
 class QAbstractEventDispatcher;
@@ -124,6 +126,7 @@ public:
 
     QWaylandWindowManagerIntegration *windowManagerIntegration() const;
 #if QT_CONFIG(cursor)
+    wp_cursor_shape_manager_v1 *cursorShapeManager() const { return mCursorShapeManager; }
     void setCursor(struct wl_buffer *buffer, struct wl_cursor_image *image);
     void setCursor(const QSharedPointer<QWaylandBuffer> &buffer, const QPoint &hotSpot);
 #endif
@@ -202,6 +205,9 @@ private:
     QList<QWaylandScreen *> mScreens;
     QList<QWaylandInputDevice *> mInputDevices;
     QList<Listener> mRegistryListeners;
+#if QT_CONFIG(cursor)
+    wp_cursor_shape_manager_v1 *mCursorShapeManager = nullptr;
+#endif
     QWaylandIntegration *mWaylandIntegration = nullptr;
 #if QT_CONFIG(wayland_datadevice)
     QScopedPointer<QWaylandDataDeviceManager> mDndSelectionHandler;

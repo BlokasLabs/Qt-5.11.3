@@ -80,6 +80,7 @@ public:
     QPoint pos() const override;
     void setPos(const QPoint &pos) override;
 
+    static uint32_t protocolShape(Qt::CursorShape shape);
     struct wl_cursor_image *cursorImage(Qt::CursorShape shape);
     QSharedPointer<QWaylandBuffer> cursorBitmapImage(const QCursor *cursor);
 
@@ -119,6 +120,7 @@ private:
 
     struct wl_cursor* requestCursor(WaylandCursor shape);
     QWaylandDisplay *mDisplay = nullptr;
+    QWaylandScreen *mScreen = nullptr;
     struct wl_cursor_theme *mCursorTheme = nullptr;
     QPoint mLastPos;
     QMap<WaylandCursor, wl_cursor *> mCursors;
